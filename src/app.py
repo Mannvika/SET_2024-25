@@ -23,7 +23,7 @@ socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 
 video_frames_queue = deque()
 audio_datas_queue = deque()
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 16000
 CHUNK_SIZE = 1024
 starttime = time.time()
 
@@ -40,12 +40,13 @@ def capture_audio():
         if status:
             print(status)
 
+        #print(indata.tolist())
         audio_datas_queue.append(indata.tolist())
         audio_classifier.audio_queue.put(indata.tolist())
 
     runner = AudioImpulseRunner(MODEL_PATH)
 
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE, device=device_id):
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=2, callback=audio_callback, blocksize=CHUNK_SIZE, device=device_id):
         try:
             model_info = runner.init()
             print("Model initialized:", model_info)
@@ -99,7 +100,7 @@ def emit_data():
 if __name__ == '__main__':
     try:
         print(sd.query_devices())
-        id = input("Enter Device ID: ")
+        id = int(input("Enter Device ID: "))
         device_id = id
 
         starttime = time.time()

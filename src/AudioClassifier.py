@@ -14,6 +14,7 @@ class AudioClassifier:
         labels = model_info['model_parameters']['labels']
         
         if self.audio_queue.empty():
+            print("Queue empty")
             return []
         
         audio_data = self.audio_queue.get()
@@ -29,4 +30,6 @@ class AudioClassifier:
                 if label == 'notScreaming':
                     continue
                 screaming_scores.append(score)
+
+        print("completed classify audio")
         return screaming_scores
