@@ -1,0 +1,71 @@
+import cv2
+import cvzone
+from ultralytics import YOLO
+
+# Load the pre-trained YOLOv11 model for pose estimation
+model = YOLO('yolo11x-pose (1).pt')  # Replace with the actual pose estimation model
+
+# Open a connection to the webcam (0 is typically the default camera)
+cap = cv2.VideoCapture(0)
+
+# Check if the webcam is opened correctly
+if not cap.isOpened():
+    print("Error: Could not open webcam.")
+    exit()
+
+while True:
+    # Capture a frame from the webcam
+    ret, frame = cap.read()
+
+    # If frame capture was unsuccessful, break the loop
+    if not ret:
+        print("Error: Could not read frame.")
+        break
+
+    # Run pose estimation on the captured frame
+    results = model(frame)
+
+    #Run operations on boxes
+    if results[0].boxes is not None and hasattr(results[0].boxes, 'id'):
+        # Get the boxes (x, y, w, h), class IDs, track IDs, and confidences
+        boxes = results[0].boxes.xyxy.int().cpu().tolist()  # Bounding boxes
+        keypoints = results[0].keypoints.xy.int().cpu().tolist() #Joints
+        class_ids = results[0].boxes.cls.int().cpu().tolist()  # Class IDs
+        track_ids = []
+        if hasattr(results[0].boxes, 'id') and results[0].boxes.id is not None:
+            track_ids = results[
+                0].boxes.id.int().cpu().tolist()  # Track IDs
+        confidences = results[0].boxes.conf.cpu().tolist()  # Confidence score
+        print("bye")
+        for box, keypoint, track_id in zip(boxes, keypoints, track_ids):
+            x1, y1, x2, y2 = box
+            nose_y = keypoint[0][1]
+            left_ankle_y = keypoint[15][1]
+            right_ankle_y = keypoint[16][1]
+            avg_ankle_y = (left_ankle_y + right_ankle_y) / 2
+            print(nose_y, avg_ankle_y)
+            if abs(nose_y - avg_ankle_y) <= 200:
+                # Mark as fall
+                print("Fallen")
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                cvzone.putTextRect(frame, f'{track_id}', (x1, y2), 1, 1)
+                cvzone.putTextRect(frame, "Fall", (x1, y1), 1, 1)
+            else:
+                # Mark as normal
+                print("Not fallen")
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cvzone.putTextRect(frame, f'{track_id}', (x1, y2), 1, 1)
+                cvzone.putTextRect(frame, "Normal", (x1, y1), 1, 1)
+    # Visualize the results on the frame
+    result_frame = results[0].plot()
+
+    # Display the frame with the pose estimation overlay
+    cv2.imshow('YOLOv11 Pose Estimation', result_frame)
+
+    # Break the loop if 'q' is pressed
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release the webcam and close the display window
+cap.release()
+cv2.destroyAllWindows()
