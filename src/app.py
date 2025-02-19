@@ -4,6 +4,7 @@ from flask_socketio import SocketIO
 import cv2
 import sounddevice as sd
 import numpy as np
+import multiprocessing
 import threading
 from fall_detection_system import FallDetectionSystem
 import socket
@@ -98,7 +99,8 @@ def handle_audio_data_from_client(data):
 
 if __name__ == '__main__':
     # Start audio capture in a separate thread
-    #threading.Thread(target=capture_audio).start()
+    audio_process = multiprocessing.Process(target=capture_audio, daemon=True)
+    audio_process.start()
     # Run the Flask-SocketIO app
     print("Local Network IP Address:", get_local_ip())
     socketio.run(app, host="0.0.0.0", port=8000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
