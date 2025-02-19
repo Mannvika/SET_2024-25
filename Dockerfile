@@ -12,8 +12,9 @@ RUN pip install psutil
 RUN pip install sounddevice
 RUN pip3 install --no-cache-dir -r requirements.txt
 RUN pip3 install edge_impulse_linux
+RUN apt install nano
+RUN apt install file
 # Copy Python files
 COPY src/*.py /app/
-COPY src/audio_model.eim /app/
 
 CMD ["python3", "app.py"]
