@@ -2,7 +2,7 @@ from edge_impulse_linux.audio import AudioImpulseRunner
 import numpy as np
 import sounddevice as sd
 
-MODEL_PATH = "audio_model.eim"
+MODEL_PATH = "/app/audio_model.eim"
 
 def audio_callback(indata, frames, time, status):
     """ Callback function to process live audio input """
