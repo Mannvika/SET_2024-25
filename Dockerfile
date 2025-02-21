@@ -4,7 +4,6 @@ RUN apt update && apt install --no-install-recommends -y gcc git zip curl htop l
 
 RUN mkdir -p /usr/src/ultralytics
 RUN python3 -m pip install --upgrade pip wheel
-RUN pip install --no-cache uwsgi flask tqdm matplotlib pyyaml psutil thop pandas hydra torch torchvision python-multipart "numpy==1.23"
 RUN pip install --no-cache ultralytics --no-deps
 
 COPY . .
