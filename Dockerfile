@@ -1,12 +1,15 @@
-FROM nvcr.io/nvidia/l4t-pytorch:r35.2.1-pth2.0-py3
+FROM nvcr.io/nvidia/l4t-ml:r35.2.1-py3
 
-WORKDIR /app
+RUN apt update
+&& apt install --no-install-recommends -y gcc git zip curl htop libgl1-mesa-glx libglib2.0-0 libpython3-dev gnupg g++
+&& apt-get install --reinstall libgstreamer1.0-0
 
-# Copy requirements.txt and install dependencies
-COPY requirements.txt /app/
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN mkdir -p /usr/src/ultralytics
+RUN python3 -m pip install --upgrade pip wheel
+RUN pip install --no-cache uwsgi flask tqdm matplotlib pyyaml psutil thop pandas hydra torch torchvision python-multipart "numpy==1.23"
+RUN pip install --no-cache ultralytics --no-deps
 
-# Copy Python files
-COPY src/*.py /app/
-
-CMD ["python3", "app.py"]
+COPY . .
+ENV OMP_NUM_THREADS=1
+EXPOSE 5000
+CMD ["uwsgi", "--ini", "uwsgi.ini"]
