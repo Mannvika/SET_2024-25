@@ -1,5 +1,3 @@
-torch
-numpy
 flask
 Flask-Cors
 Flask-SocketIO
