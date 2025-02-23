@@ -28,13 +28,13 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       # Step 5: Cache Docker layers
-      - name: Cache Docker layers
-        uses: actions/cache@v3
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-docker-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-docker-
+      # - name: Cache Docker layers
+        # uses: actions/cache@v3
+       # with:
+        #  path: /tmp/.buildx-cache
+        #  key: ${{ runner.os }}-docker-${{ github.sha }}
+        #  restore-keys: |
+         #   ${{ runner.os }}-docker-
 
       # Step 6: Build and Push Docker Image
       - name: Build and Push Docker Image (Multi-Platform)
