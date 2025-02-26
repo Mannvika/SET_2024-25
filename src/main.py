@@ -25,6 +25,7 @@ def main():
         logging.error("Error: Could not open webcam.")
         return
 
+    # Attempt to set resolution; note that the actual capture size may vary
     video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
@@ -37,12 +38,14 @@ def main():
             logging.error("Error: Could not read frame from webcam.")
             break
 
+        # Flip frame horizontally to mirror the view (like most camera apps)
+        frame = cv2.flip(frame, 1)
+
         # Process the frame for fall and injury detection
         processed_frame = fall_detection_system.process_frame(frame)
 
         # Display the processed frame in a window
         cv2.imshow('Fall Detection System', processed_frame)
-        #cv2.resizeWindow('Fall Detection System', 1080, 1920)
 
         # Exit the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -52,7 +55,6 @@ def main():
     # Release the video capture object and close all OpenCV windows
     video_capture.release()
     cv2.destroyAllWindows()
-
 
 if __name__ == "__main__":
     main()
