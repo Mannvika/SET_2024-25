@@ -1,35 +1,28 @@
-import React, { useEffect, useRef } from 'react';
-import io from 'socket.io-client';
+import React, { useEffect, useRef, useState} from 'react';
+import io from 'socket.io-client'; 
 
 function App() {
-    const socket = useRef(null);
     const audioContextRef = useRef(null);
-
+    
+    const socket = io('http://127.0.0.1:8000/');
+    const [audioBuffer, setAudioBuffer] = useState([]);
+    const [imageSrc, setImageSrc] = useState(null);
     useEffect(() => {
-        // Initialize WebSocket connection
-        socket.current = io('http://127.0.0.1:8000');
-
-        // Initialize AudioContext
-        audioContextRef.current = new (window.AudioContext || window.webkitAudinpmoContext)();
-
-        // Listen for audio data from server
-        socket.current.on('audio_data', (data) => {
-            console.log("Received audio data:", data);  // Log to check if audio data is received
-            const floatData = Float32Array.from(data);
-            const audioBuffer = audioContextRef.current.createBuffer(1, floatData.length, 44100);
-            audioBuffer.getChannelData(0).set(floatData);
-
-            // Play the audio data
-            const source = audioContextRef.current.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioContextRef.current.destination);
-            source.start();
+        console.log('hello');
+        socket.on('audio_data', (data) => {
+            console.log('Received audio data:', data);
+            setAudioBuffer((prevBuffer) => [...prevBuffer, ...data]);
         });
+        socket.on("video_frame", (data) => {
+            const imageBlob = new Blob([new Uint8Array(data.frame)], { type: "image/jpeg" });
+            const imageUrl = URL.createObjectURL(imageBlob);
+            setImageSrc(imageUrl);
+        });
+      
 
         return () => {
-            // Cleanup on component unmount
-            if (socket.current) socket.current.disconnect();
-            if (audioContextRef.current) audioContextRef.current.close();
+            socket.off('audio_data');
+            socket.off("video_frame");
         };
     }, []);
 
@@ -44,15 +37,9 @@ function App() {
 
     return (
         <div>
-            <h1>Video Stream</h1>
-            <img
-                src="http://127.0.0.1:8000/stream"
-                alt="Video Stream"
-                style={{ width: '100%', maxWidth: '600px', height: 'auto' }}
-            />
-            <button onClick={playTestTone}>Play Test Tone</button>
-            <p>Check the console to verify if audio data is being received.</p>
-        </div>
+        <h1>Real-Time Video Stream</h1>
+        {imageSrc && <img src={imageSrc} alt="Video Stream" style={{ width: "600px" }} />}
+      </div>
     );
 }
 
