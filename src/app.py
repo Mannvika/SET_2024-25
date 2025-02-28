@@ -3,8 +3,9 @@ import sys
 
 device_id = 0
 
-def main(argc, argv[]):
-    device_id = argv[1]
+def main(argc, argv):
+    print(sd.query_devices())
+    device_id = int(input("Which device ID would you like to use?"))
     ScreamDetector  = AudioClassifier(device_id)
     ScreamDetector.start_listening()
     
