@@ -35,12 +35,11 @@ class AudioClassifier:
         screaming_scores = []
         for res, audio in runner.classifier(self.device_ID):
             print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='\n')
-            score = res['result']['classification'][label]
-            print(score)
             for label in labels:
+                score = res['result']['classification'][label]
+                print(score)
                 if label == 'notScreaming':
                     continue
-                score = res['result']['classification'][label]
                 screaming_scores.append(score)
         return screaming_scores
 
