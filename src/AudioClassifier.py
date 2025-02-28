@@ -33,7 +33,7 @@ class AudioClassifier:
         audio_data = np.mean(audio_data, axis=1)  # Convert stereo to mono
 
         screaming_scores = []
-        for res, audio in runner.classifier(0):
+        for res, audio in runner.classifier(self.device_ID):
             print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='\n')
             for label in labels:
                 if label == 'notScreaming':
