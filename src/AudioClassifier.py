@@ -37,7 +37,7 @@ class AudioClassifier:
             print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='\n')
             for label in labels:
                 score = res['result']['classification'][label]
-                print(score)
+                print(score, label)
                 if label == 'notScreaming':
                     continue
                 screaming_scores.append(score)
