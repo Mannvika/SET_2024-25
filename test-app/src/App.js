@@ -1,91 +1,120 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import { io } from 'socket.io-client';
 import DirectionButtons from './DirectionButtons';
 
 function App() {
-  const [ipAddress, setIpAddress] = useState('');
   const [isVideoOn, setIsVideoOn] = useState(false);
+  const [isDataSending, setIsDataSending] = useState(false);
+  const [boxContent, setBoxContent] = useState(""); // Removed initial content
+  const [logs, setLogs] = useState([]); // To store logs from Flask
+  const [isVideoActive, setIsVideoActive] = useState(false);  // Track if video is active for button color
+  const [isDataActive, setIsDataActive] = useState(false); // Track if data transmission is active for button color
+
   const flaskServerUrl = "http://127.0.0.1:8000";
 
-  // Fetch the IP address from the Flask server
   useEffect(() => {
-    const fetchIpAddress = async () => {
-      try {
-        const response = await fetch(`${flaskServerUrl}/get-ip`);
-        const data = await response.json();
-        setIpAddress(data.ip);
-      } catch (error) {
-        console.error("Error fetching IP:", error);
-      }
-    };
+    // Initialize WebSocket connection to Flask
+    const socket = io(flaskServerUrl, { transports: ['websocket'] });
 
-    fetchIpAddress();
-  }, []);
-
-  // Toggle video feed
-  const toggleVideoFeed = useCallback(() => {
-    setIsVideoOn((prevState) => !prevState);
-  }, []);
-
-  // Toggle data transmission and send data
-const toggleDataTransmission = useCallback(async () => {
-  const data = {
-    runID: "example_" + new Date().getTime(), // Unique ID for each run
-    timestamp: new Date().toISOString()
-  };
-
-  try {
-    const response = await fetch(`${flaskServerUrl}/save_data`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
+    socket.on("connect", () => {
+      console.log("Connected to Flask WebSocket");
     });
 
-    if (!response.ok) {
-      throw new Error("Failed to send data");
+    // Listen for logs from Flask
+    socket.on("log", (data) => {
+      console.log("Received log:", data.message); // Log received message from Flask
+      setLogs(prevLogs => [...prevLogs, data.message]); // Add new log to logs state
+    });
+
+    socket.on("disconnect", () => {
+      console.log("Disconnected from Flask WebSocket");
+    });
+
+    return () => socket.disconnect(); // Cleanup WebSocket on component unmount
+  }, []);
+
+  const toggleVideoFeed = useCallback(() => {
+    setIsVideoOn(prevState => {
+      const newState = !prevState;
+      setIsVideoActive(newState);  // Update button color when video feed is toggled
+      return newState;
+    });
+  }, []);
+
+  const toggleDataTransmission = async () => {
+    const newAction = isDataSending ? 'stop' : 'start';
+    setIsDataSending(current => !current); // Toggle UI instantly
+    setIsDataActive(current => !current);  // Update button color when data transmission is toggled
+
+    try {
+      const response = await fetch(`${flaskServerUrl}/save_data`, {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ action: newAction })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+          setBoxContent(`${newAction} data transmission`);
+      } else {
+          setIsDataSending(current => !current);
+          setBoxContent("Failed to update data transmission");
+          throw new Error(data.message || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('Error toggling data transmission:', error);
     }
-
-    const responseData = await response.json();
-    console.log("Data successfully sent to backend:", responseData);
-  } catch (error) {
-    console.error("Error sending data to backend:", error);
-  }
-}, [flaskServerUrl]);
-
+  };
 
   return (
     <div className="App">
       <header className="App-header">
         <h2>Live Video Feed</h2>
 
-        {/* Video Toggle Button */}
-        <button onClick={toggleVideoFeed}>
+        {/* Video toggle button */}
+        <button
+          className={`toggle-button ${isVideoActive ? 'active' : ''}`}
+          onClick={toggleVideoFeed}
+        >
           {isVideoOn ? 'Turn Video Off' : 'Turn Video On'}
         </button>
 
-        {/* Video Feed */}
         {isVideoOn && (
-            <div className="video-feed">
-              <img
-                  src={`${flaskServerUrl}/stream`}  // Video stream endpoint
-                  alt="Live Video Feed"
-                  onError={(e) => console.error("Error loading video feed:", e)}
-                  onLoad={() => console.log("Video feed loaded successfully")}
-                  crossOrigin="anonymous"
-                  style={{width: '80%', border: '2px solid #333'}}
-              />
-            </div>
+          <div className="video-feed">
+            <img
+              src={`${flaskServerUrl}/stream`}
+              alt="Live Video Feed"
+              onError={(e) => console.error("Error loading video feed:", e)}
+              onLoad={() => console.log("Video feed loaded successfully")}
+              crossOrigin="anonymous"
+              style={{ width: '80%', border: '2px solid #333' }}
+            />
+          </div>
         )}
 
-        {/* Direction Buttons */}
-        <DirectionButtons/>
+        <DirectionButtons />
 
-      {/* Data Transmission Button */}
-      <button onClick={toggleDataTransmission}>
-        Send Data to DynamoDB
-      </button>
+        {/* Data transmission button */}
+        <button
+          className={`toggle-button ${isDataActive ? 'active' : ''}`}
+          onClick={toggleDataTransmission}
+        >
+          {isDataSending ? 'Stop Sending Data' : 'Send Data'}
+        </button>
+
+        {/* Display Boxes */}
+        <div className="info-box">{boxContent}</div>
+
+        {/* Flask log box in the top-right corner */}
+        <div className="flask-log-box">
+            <h3 className="log-title">Data (not implemented currently)</h3> {/* Title for the log box */}
+          {logs.map((log, index) => (
+            <p key={index}>{log}</p>
+          ))}
+        </div>
       </header>
     </div>
   );

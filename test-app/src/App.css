@@ -28,7 +28,6 @@
   color: #61dafb;
 }
 
-
 .keyboard {
   display: grid;
   grid-template-areas:
@@ -44,7 +43,7 @@
   padding: 15px 25px;
   font-size: 16px;
   cursor: pointer;
-  border: 2px solid #ddd;
+  border: none; /* Removed border */
   border-radius: 8px;
   background: #f0f0f0;
   box-shadow: 2px 2px 0 #cccccc, -2px -2px 0 #ffffff;
@@ -63,6 +62,7 @@
   box-shadow: inset 2px 2px 0 #cccccc, inset -2px -2px 0 #ffffff;
 }
 
+
 /* Positioning buttons */
 .key:nth-child(1) {
   grid-area: up;
@@ -80,9 +80,6 @@
   grid-area: right;
 }
 
-
-
-
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);
@@ -90,25 +87,61 @@
   to {
     transform: rotate(360deg);
   }
-}/* index.css */
-
-/* Button styling for video toggle button */
-.video-toggle {
-    background-color: #93cf40; /* Button's primary color */
-    color: black;               /* Button text color */
-    border: none;               /* Remove default border */
-    border-radius: 5px;        /* Rounded corners */
-    padding: 10px 20px;        /* Padding for the button */
-    cursor: pointer;            /* Pointer cursor on hover */
-    font-size: 16px;            /* Font size */
-    transition: background-color 0.3s ease; /* Smooth transition effect */
-    margin-bottom: 15px;        /* Space below the button */
 }
 
-.video-toggle:hover {
-    background-color: #76b84d; /* Slightly darker shade on hover */
+.toggle-button {
+  background-color: #0f6cb6;
+  color: black;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 18px;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  width: 200px; /* Set fixed width for buttons */
+}
+/*used for changing color while hovering over button*/
+/*.toggle-button:hover {*/
+/*  background-color: #45a049;*/
+/*  transform: scale(1.05); !* Slightly increase size on hover *!*/
+/*}*/
+
+.toggle-button:focus {
+  outline: none; /* Remove focus outline */
 }
 
-.video-toggle.active {
-    background-color: #5b9c3c; /* Darker shade when activated */
+/* Active (pressed) effect */
+.toggle-button.active {
+  background-color: #45a049;  /* Green when pressed */
+}
+
+.video-feed img {
+  width: 80%;
+  max-width: 800px;
+  margin-top: 20px;
+}
+
+.flask-log-box {
+  position: fixed;
+  top: 0%;
+  right: 0%;
+  width: 30vw;
+  height: 40vh;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 0.1px;
+  border-radius: 8px;
+  overflow-y: scroll;
+  font-size: 15px;
+  z-index: 1000;
+}
+
+.flask-log-box p {
+  margin: 5px 0;
+}
+
+ .log-title {
+  font-size: 18px;            /* Larger font size for the title */
+  font-weight: bold;          /* Bold font for the title */
+  margin-bottom: 5px;          /* Spacing below the title */
 }

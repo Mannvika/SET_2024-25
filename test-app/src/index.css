@@ -1,15 +1,48 @@
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+.keyboard .key {
+  background-color: #0f6cb6; /* Primary color for the button */
+  color: black;
+  border: none;
+  border-radius: 5px;
+  padding: 15px 25px;
+  margin: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease; /* Smooth transition effect */
+}
+
+.keyboard .key:hover, .keyboard .key.active {
+  background-color: #93cf40; /* green on hover and when active */
+}
+
+.input-method-controls {
+  margin-bottom: 20px;
+}
+
+.control-button {
+  background-color: #0f6cb6;
+  color: black;
+  border: none;
+  border-radius: 5px;
+  padding: 10px 15px;
+  margin: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.3s ease;
+}
+
+.control-button.active {
+  background-color: #93cf40; /* green for active button */
 }
 /* index.css */
 
