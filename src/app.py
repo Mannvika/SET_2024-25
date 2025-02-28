@@ -1,9 +1,7 @@
-from AudioClassifier.py import AudioClassifier
+from AudioClassifier import AudioClassifier
 import sys
 
-device_id = 0
-
-def main(argc, argv):
+def main():
     print(sd.query_devices())
     device_id = int(input("Which device ID would you like to use?"))
     ScreamDetector  = AudioClassifier(device_id)
@@ -11,6 +9,6 @@ def main(argc, argv):
     
 if __name__ == "__main__":
     try:
-        main(sys.argv)
+        main()
     except KeyboardInterrupt:
         print("\nStopped by user.")
