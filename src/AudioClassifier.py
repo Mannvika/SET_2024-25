@@ -10,12 +10,12 @@ import queue
 MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 
-class AudioClassifer:
+class AudioClassifier:
 
     def __init__(self, device_id: int):
-        self.__device_ID = device_id
+        self.device_ID = device_id
         # Queue for storing audio chunks
-        self.__audio_queue__ = queue.Queue()
+        self.audio_queue = queue.Queue()
         return
 
     def audio_callback(self, indata, frames, time, status):
