@@ -10,7 +10,7 @@ table = dynamodb.Table('RescueGator_Metrics') # Replace with your DynamoDB table
 def save_to_dynamo(data):
     """Save data to DynamoDB."""
     try:
-        print("SAVING DATAAAAAAAAAA")
+        print("SAVING DATA")
         item = {**data}
         total_time = 0
         print("Inner Dictionaries (not YET sent to DynamoDB): ", item)
