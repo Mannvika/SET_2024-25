@@ -55,14 +55,18 @@ def emit_video_frames(frame_queue):
         processed_frame = fall_system.process_frame(frame)  # Process frame
         _, encoded_image = cv2.imencode(".jpg", processed_frame)
         frame_queue.put(encoded_image.tobytes())  # Send frame to main process
+        time.sleep(0.2)
 
     vc.release()
 
+
 def audio_process(audio_queue):
     """Runs scream detection in a separate process"""
-    device_id = 0  # Adjust as needed
+    device_id = 30  # Adjust as needed
     scream_detector = AudioClassifier(device_id)
-    scream_detector.start_listening(audio_queue)
+    while True:
+        scream_detector.start_listening(audio_queue)
+        time.sleep(0.1)
 
 if __name__ == '__main__':
     # Start Processes
@@ -88,6 +92,7 @@ if __name__ == '__main__':
             if not frame_queue.empty():
                 frame = frame_queue.get()
                 socketio.emit('video_frame', {'frame': frame})
+                print('sent frame')
 
     def send_audio_alerts():
         """Send scream detection alerts to client"""
@@ -98,7 +103,8 @@ if __name__ == '__main__':
 
     # Start background tasks for emitting data
     socketio.start_background_task(send_video_frames)
-    socketio.start_background_task(send_audio_alerts)
+    #socketio.start_background_task(send_audio_alerts)
 
     # Run Flask app
+    
     socketio.run(app, host="0.0.0.0", port=8000, debug=False, use_reloader=False)

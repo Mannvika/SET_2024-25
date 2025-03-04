@@ -39,7 +39,7 @@ class AudioClassifier:
 
     def start_listening(self, audio_queue):
         with AudioImpulseRunner(MODEL_PATH) as runner:
-            with sd.InputStream(callback=self.audio_callback, channels=2, samplerate=44100, blocksize=512, device='default'):
+            with sd.InputStream(callback=self.audio_callback, channels=2, samplerate=44100, blocksize=512, device=self.device_ID):
                 print("Listening...")
                 while True:
                     scores = self.classify_audio(runner)

@@ -59,14 +59,8 @@ def capture_audio():
     """Capture audio in real-time and send to the client."""
     def audio_callback(indata, frames, time, status):
         print(status)
-        if status:
-            print(status)
-        # Send audio data to React client
-        socketio.emit('audio_data', indata.tolist())
-
-    # Start audio stream
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
-        threading.Event().wait()  # Keep thread running
+       threading.Event().wait()  # Keep thread running
 
 def emit_video_frames():
     """Capture video frames and send them to the client via SocketIO."""
@@ -90,7 +84,7 @@ def emit_video_frames():
             _, encoded_image = cv2.imencode(".jpg", processed_frame)
             socketio.emit('video_frame', {'frame': encoded_image.tobytes()})
 
-        time.sleep(1 / 30)  # Adjust to match the desired FPS (30 FPS)
+         # Adjust to match the desired FPS (30 FPS)
 
     vc.release()
 
@@ -104,10 +98,10 @@ def generate_audio_data():
 
 if __name__ == '__main__':
     # Start audio capture in a separate thread
-    audio_thread = threading.Thread(target=capture_audio, daemon=True)
-    audio_thread.start()
+   # audio_thread = multiprocessing.Process(target=capture_audio)
+   # audio_thread.start()
 
-    video_thread = threading.Thread(target=emit_video_frames, daemon=True)
+    video_thread = multiprocessing.Process(target=emit_video_frames)
     video_thread.start()
     # Run the Flask-SocketIO app
     print("Local Network IP Address:", get_local_ip())
