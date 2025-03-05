@@ -13,6 +13,9 @@ import time
 
 webhook = "https://discord.com/api/webhooks/1329639907442036769/5ShE26g-ZleAN1lY7L5lPGv-HyqZx7TukNTF2rrAwuQeWNUku4dNMrsWZBnHKnJYZOlN"
 
+
+video_frames_queue = []
+audio_datas_queue = []
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(0)
@@ -58,9 +61,15 @@ lock = threading.Lock()
 def capture_audio():
     """Capture audio in real-time and send to the client."""
     def audio_callback(indata, frames, time, status):
-        print(status)
+        if status:
+            print(status)
+        # Send audio data to React client
+        # socketio.emit('audio_data', indata.tolist())
+        audio_datas_queue.append(indata.tolist())
+
+    # Start audio stream
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
-       threading.Event().wait()  # Keep thread running
+        threading.Event().wait()  # Keep thread running
 
 def emit_video_frames():
     """Capture video frames and send them to the client via SocketIO."""
@@ -82,27 +91,35 @@ def emit_video_frames():
 
         with lock:
             _, encoded_image = cv2.imencode(".jpg", processed_frame)
-            socketio.emit('video_frame', {'frame': encoded_image.tobytes()})
+            #socketio.emit('video_frame', {'frame': encoded_image.tobytes()})
+            video_frames_queue.append(encoded_image.tobytes())
 
-         # Adjust to match the desired FPS (30 FPS)
+        time.sleep(.15)  # Adjust to match the desired FPS (30 FPS)
 
     vc.release()
 
-def generate_audio_data():
-    """Simulates audio data streaming from the Flask app."""
+def emit_data():
     while True:
-        # Simulated audio data (replace this with actual audio stream data)
-        audio_chunk = np.random.randint(-32768, 32767, 1024, dtype=np.int16).tobytes()
-        socketio.emit('audio_data_to_client', {'audio': audio_chunk})
-        time.sleep(0.1)  # Simulatinsg real-time streaming
+        with lock:
+            if video_frames_queue:
+                socketio.emit('video_frame', {'frame': video_frames_queue[-1], 'audio_data' : audio_datas_queue[-1]})
+                print('hi')
+                video_frames_queue.pop(-1)
+                audio_datas_queue.pop(-1)
+        
+        time.sleep(0.0000000001)
+
 
 if __name__ == '__main__':
     # Start audio capture in a separate thread
-   # audio_thread = multiprocessing.Process(target=capture_audio)
-   # audio_thread.start()
+    audio_thread = threading.Thread(target=capture_audio, daemon=False)
+    audio_thread.start()
 
-    video_thread = multiprocessing.Process(target=emit_video_frames)
+    video_thread = threading.Thread(target=emit_video_frames, daemon=False)
     video_thread.start()
+
+    emitter_thread = threading.Thread(target=emit_data, daemon=False)
+    emitter_thread.start()
     # Run the Flask-SocketIO app
     print("Local Network IP Address:", get_local_ip())
     socketio.run(app, host="0.0.0.0", port=8000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
