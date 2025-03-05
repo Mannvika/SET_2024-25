@@ -4,16 +4,18 @@ import io from 'socket.io-client';
 function App() {
     const audioContextRef = useRef(null);
     
-    const socket = io('http://127.0.0.1:8000/');
     const [audioBuffer, setAudioBuffer] = useState([]);
     const [imageSrc, setImageSrc] = useState(null);
     useEffect(() => {
+        const socket = io('http://10.138.111.69:8000');
         console.log('hello');
-        socket.on('audio_data', (data) => {
-            console.log('Received audio data:', data);
-            setAudioBuffer((prevBuffer) => [...prevBuffer, ...data]);
-        });
+        // socket.on('audio_data', (data) => {
+        //     console.log('Received audio data:', data);
+        //     setAudioBuffer((prevBuffer) => [...prevBuffer, ...data]);
+        // });
         socket.on("video_frame", (data) => {
+            console.log('bonjour');
+            console.log(data.audio_data)
             const imageBlob = new Blob([new Uint8Array(data.frame)], { type: "image/jpeg" });
             const imageUrl = URL.createObjectURL(imageBlob);
             setImageSrc(imageUrl);
