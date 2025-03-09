@@ -1,16 +1,17 @@
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
+import signal
+import sys
 import cv2
 import multiprocessing
-import numpy as np
-import socket
-import requests
+import sounddevice as sd
 import time
-from AudioClassifier import AudioClassifier  # Your scream detection class
+#from AudioClassifier import AudioClassifier  # Your scream detection class
 from fall_detection_system import FallDetectionSystem  # Your fall detection class
 
 # Discord Webhook for Notifications
+'''
 WEBHOOK = "https://discord.com/api/webhooks/1329639907442036769/5ShE26g-ZleAN1lY7L5lPGv-HyqZx7TukNTF2rrAwuQeWNUku4dNMrsWZBnHKnJYZOlN"
 
 def get_local_ip():
@@ -31,14 +32,39 @@ def discord_message(ip):
     message = {"embeds": [{"title": "IP Address", "color": 65280, "description": f"{ip}:8000"}]}
     x = requests.post(WEBHOOK, json=message)
     print("Discord Notification:", "Success" if x.status_code == 204 else "Failed")
+'''
 
-# Initialize Flask & SocketIO
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-def emit_video_frames(frame_queue):
-    """Capture video frames and send them to the client via a queue"""
+# Video and audio parameters
+SAMPLE_RATE = 44100  # Audio sample rate in Hz
+CHUNK_SIZE = 1024  # Audio chunk size
+
+# Multiprocessing Queues
+video_queue = multiprocessing.Queue(maxsize=10)
+audio_queue = multiprocessing.Queue(maxsize=10)
+
+# List to track processes
+processes = []
+
+def capture_audio(audio_queue):
+    """Capture audio in real-time and store in a queue."""
+    def audio_callback(indata, frames, time, status):
+        if status:
+            print(status)
+        try:
+            audio_queue.put_nowait(indata.tolist())  # Store audio chunks
+        except:
+            pass  # Avoid blocking if queue is full
+
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
+        while True:
+            time.sleep(0.01)  # Prevent CPU overload
+
+def capture_video(video_queue):
+    """Capture video frames, process with YOLOv11, and store in a queue."""
     model_path = 'yolo11x-pose.pt'
     fall_system = FallDetectionSystem(model_path)
     vc = cv2.VideoCapture(0)
@@ -52,59 +78,71 @@ def emit_video_frames(frame_queue):
         if not rval:
             break
         
-        processed_frame = fall_system.process_frame(frame)  # Process frame
+        # Run pose estimation on the captured frame (uses CUDA)
+        processed_frame = fall_system.process_frame(frame)
+
         _, encoded_image = cv2.imencode(".jpg", processed_frame)
-        frame_queue.put(encoded_image.tobytes())  # Send frame to main process
-        time.sleep(0.2)
+        try:
+            video_queue.put_nowait(encoded_image.tobytes())  # Store frame in queue
+            print("Frame added to queue")  # Debug statement
+        except Exception as e:
+            print(f"Error adding frame to queue: {e}")
+        
+        time.sleep(1 / 30)  # Adjust FPS (30 FPS target)
 
     vc.release()
 
-
-def audio_process(audio_queue):
-    """Runs scream detection in a separate process"""
-    device_id = 30  # Adjust as needed
-    scream_detector = AudioClassifier(device_id)
+def emit_data(video_queue, audio_queue):
+    """Main thread function to emit audio and video to clients."""
     while True:
-        scream_detector.start_listening(audio_queue)
-        time.sleep(0.1)
+        frame = None
+        audio_data = None
+
+        #print(f"Video queue size: {video_queue.qsize()}, Audio queue size: {audio_queue.qsize()}")
+
+        if not video_queue.empty():
+            frame = video_queue.get_nowait()
+            print("Frame exists")
+
+        if not audio_queue.empty():
+            audio_data = audio_queue.get_nowait()
+            print("No Audio_data")
+
+        if frame is not None and audio_data is not None:
+            try:
+                print("Emitting video and audio data...")
+                socketio.emit('video_frame', {'frame': frame, 'audio_data': audio_data})
+            except Exception as e:
+                print(f"Error emitting video and audio data: {e}")
+        else:
+            pass
+        time.sleep(1 / 30)  # Match video FPS
+
+def graceful_exit(sig, frame):
+    """Handles Ctrl + C and stops all processes."""
+    print("\n[INFO] Ctrl + C detected. Shutting down...")
+    
+    for p in processes:
+        print(f"[INFO] Terminating process {p.pid}...")
+        p.terminate()
+        p.join()
+    
+    print("[INFO] Cleanup complete. Exiting.")
+    sys.exit(0)
 
 if __name__ == '__main__':
-    # Start Processes
-    frame_queue = multiprocessing.Queue()
-    audio_queue = multiprocessing.Queue()
+    # Register Ctrl + C handler
+    signal.signal(signal.SIGINT, graceful_exit)
 
-    video_process = multiprocessing.Process(target=emit_video_frames, args=(frame_queue,))
-    audio_process = multiprocessing.Process(target=audio_process, args=(audio_queue,))
+    # Start video and audio processes
+    audio_process = multiprocessing.Process(target=capture_audio, args=(audio_queue,))
+    video_process = multiprocessing.Process(target=capture_video, args=(video_queue,))
+    emit_process = multiprocessing.Process(target=emit_data, args=(video_queue, audio_queue))
 
-    video_process.start()
-    audio_process.start()
+    processes.extend([audio_process, video_process, emit_process])  # Track processes
 
-    print("Local Network IP Address:", get_local_ip())
-    discord_message(get_local_ip())
+    for p in processes:
+        p.start()
 
-    @socketio.on('connect')
-    def handle_connect():
-        print("Client Connected")
-
-    def send_video_frames():
-        """Continuously send video frames to client"""
-        while True:
-            if not frame_queue.empty():
-                frame = frame_queue.get()
-                socketio.emit('video_frame', {'frame': frame})
-                print('sent frame')
-
-    def send_audio_alerts():
-        """Send scream detection alerts to client"""
-        while True:
-            if not audio_queue.empty():
-                alert = audio_queue.get()
-                socketio.emit('audio_alert', {'message': alert})
-
-    # Start background tasks for emitting data
-    socketio.start_background_task(send_video_frames)
-    #socketio.start_background_task(send_audio_alerts)
-
-    # Run Flask app
-    
-    socketio.run(app, host="0.0.0.0", port=8000, debug=False, use_reloader=False)
+    # Run Flask-SocketIO in the main thread
+    socketio.run(app, host="0.0.0.0", port=8000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)

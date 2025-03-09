@@ -1,4 +1,6 @@
 /src/yolo11x-pose.pt
 src/yolo11x-pose.pt
+/detections.json
+/yolo11x-pose.pt
 
 */.venv

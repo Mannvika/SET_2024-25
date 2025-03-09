@@ -1,21 +1,16 @@
-from flask import Flask, Response, jsonify, request
+from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
 import cv2
 import sounddevice as sd
-import numpy as np
-import multiprocessing
 import threading
+import numpy as np
 from fall_detection_system import FallDetectionSystem
-import socket
-import requests
 import time
 
+'''
 webhook = "https://discord.com/api/webhooks/1329639907442036769/5ShE26g-ZleAN1lY7L5lPGv-HyqZx7TukNTF2rrAwuQeWNUku4dNMrsWZBnHKnJYZOlN"
 
-
-video_frames_queue = []
-audio_datas_queue = []
 def get_local_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(0)
@@ -42,84 +37,83 @@ def discord_message(ip):
         print("success")
     else:
         print("failed")
+        
 
 print("Local Network IP Address:", get_local_ip())
-discord_message(get_local_ip())
-
+discord_message(get_local_ip())'
+'''
 
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-
-
-# Video and audio parameters
-SAMPLE_RATE = 44100  # Audio sample rate in Hz
-CHUNK_SIZE = 1024  # Audio chunk size
+video_frames_queue = []
+audio_datas_queue = []
+SAMPLE_RATE = 44100
+CHUNK_SIZE = 1024
 lock = threading.Lock()
+stop_event = threading.Event()  # Stop signal for threads
 
 def capture_audio():
     """Capture audio in real-time and send to the client."""
     def audio_callback(indata, frames, time, status):
         if status:
             print(status)
-        # Send audio data to React client
-        # socketio.emit('audio_data', indata.tolist())
         audio_datas_queue.append(indata.tolist())
 
-    # Start audio stream
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
-        threading.Event().wait()  # Keep thread running
+        while not stop_event.is_set():
+            time.sleep(0.1)  # Prevent CPU overload
 
 def emit_video_frames():
-    """Capture video frames and send them to the client via SocketIO."""
+    """Capture video frames and send them to the client."""
     model_path = 'yolo11x-pose.pt'
     fall_system = FallDetectionSystem(model_path)
     vc = cv2.VideoCapture(0)
-
     if not vc.isOpened():
         print("Error: Could not open video stream.")
         return
 
-    while True:
+    while not stop_event.is_set():
         rval, frame = vc.read()
         if not rval:
             break
-        
-        # Run pose estimation on the captured frame
+
         processed_frame = fall_system.process_frame(frame)
 
         with lock:
             _, encoded_image = cv2.imencode(".jpg", processed_frame)
-            #socketio.emit('video_frame', {'frame': encoded_image.tobytes()})
             video_frames_queue.append(encoded_image.tobytes())
 
-        time.sleep(.15)  # Adjust to match the desired FPS (30 FPS)
+        time.sleep(1 / 30)  # Maintain 30 FPS
 
     vc.release()
 
 def emit_data():
-    while True:
+    """Emit video and audio data to the client."""
+    while not stop_event.is_set():
         with lock:
-            if video_frames_queue:
-                socketio.emit('video_frame', {'frame': video_frames_queue[-1], 'audio_data' : audio_datas_queue[-1]})
-                print('hi')
+            if video_frames_queue and audio_datas_queue:
+                socketio.emit('video_frame', {'frame': video_frames_queue[-1], 'audio_data': audio_datas_queue[-1]})
                 video_frames_queue.pop(-1)
                 audio_datas_queue.pop(-1)
-        
-        time.sleep(0.0000000001)
 
+        time.sleep(1 / 30)
 
 if __name__ == '__main__':
-    # Start audio capture in a separate thread
-    audio_thread = threading.Thread(target=capture_audio, daemon=False)
-    audio_thread.start()
+    try:
+        audio_thread = threading.Thread(target=capture_audio, daemon=True)
+        video_thread = threading.Thread(target=emit_video_frames, daemon=True)
+        emitter_thread = threading.Thread(target=emit_data, daemon=True)
 
-    video_thread = threading.Thread(target=emit_video_frames, daemon=False)
-    video_thread.start()
+        audio_thread.start()
+        video_thread.start()
+        emitter_thread.start()
 
-    emitter_thread = threading.Thread(target=emit_data, daemon=False)
-    emitter_thread.start()
-    # Run the Flask-SocketIO app
-    print("Local Network IP Address:", get_local_ip())
-    socketio.run(app, host="0.0.0.0", port=8000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
+        socketio.run(app, host="0.0.0.0", port=8000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
+
+    except KeyboardInterrupt:
+        print("\nCtrl+C detected! Stopping all threads...")
+        stop_event.set()
+        time.sleep(1)  # Allow threads to exit gracefully
+        print("Shutdown complete.")

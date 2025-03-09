@@ -1,47 +1,66 @@
-import React, { useEffect, useRef, useState} from 'react';
-import io from 'socket.io-client'; 
+import React, { useEffect, useRef, useState } from 'react';
+import io from 'socket.io-client';
 
 function App() {
     const audioContextRef = useRef(null);
-    
     const [audioBuffer, setAudioBuffer] = useState([]);
     const [imageSrc, setImageSrc] = useState(null);
+
     useEffect(() => {
-        const socket = io('http://10.138.111.69:8000');
-        console.log('hello');
-        // socket.on('audio_data', (data) => {
-        //     console.log('Received audio data:', data);
-        //     setAudioBuffer((prevBuffer) => [...prevBuffer, ...data]);
-        // });
+        const socket = io('http://localhost:8000');
+
+        console.log('Attempting to connect to the socket server...');
+
+        socket.on('connect', () => {
+            console.log(`Socket connected: ${socket.id}`);
+        });
+
+        socket.on('disconnect', (reason) => {
+            console.log(`Socket disconnected: ${reason}`);
+        });
+
+        socket.on('connect_error', (error) => {
+            console.error('Socket connection error:', error);
+        });
+
         socket.on("video_frame", (data) => {
-            console.log('bonjour');
-            console.log(data.audio_data)
+            console.log('Received video frame');
+            console.log('Audio data:', data.audio_data);
+
             const imageBlob = new Blob([new Uint8Array(data.frame)], { type: "image/jpeg" });
             const imageUrl = URL.createObjectURL(imageBlob);
             setImageSrc(imageUrl);
         });
-      
 
         return () => {
-            socket.off('audio_data');
+            console.log('Cleaning up: Disconnecting socket...');
+            socket.off('connect');
+            socket.off('disconnect');
+            socket.off('connect_error');
             socket.off("video_frame");
+            socket.disconnect();
         };
     }, []);
 
     const playTestTone = () => {
-      const oscillator = audioContextRef.current.createOscillator();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(440, audioContextRef.current.currentTime); // A4 note
-      oscillator.connect(audioContextRef.current.destination);
-      oscillator.start();
-      oscillator.stop(audioContextRef.current.currentTime + 1); // Play for 1 second
-  };
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        const oscillator = audioContextRef.current.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, audioContextRef.current.currentTime); // A4 note
+        oscillator.connect(audioContextRef.current.destination);
+        oscillator.start();
+        oscillator.stop(audioContextRef.current.currentTime + 1); // Play for 1 second
+    };
 
     return (
         <div>
-        <h1>Real-Time Video Stream</h1>
-        {imageSrc && <img src={imageSrc} alt="Video Stream" style={{ width: "600px" }} />}
-      </div>
+            <h1>Real-Time Video Stream</h1>
+            {imageSrc && <img src={imageSrc} alt="Video Stream" style={{ width: "600px" }} />}
+            <button onClick={playTestTone}>Play Test Tone</button>
+        </div>
     );
 }
 
