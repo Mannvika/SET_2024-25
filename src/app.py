@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -7,6 +10,7 @@ import threading
 import numpy as np
 from fall_detection_system import FallDetectionSystem
 import time
+import eventlet
 
 '''
 webhook = "https://discord.com/api/webhooks/1329639907442036769/5ShE26g-ZleAN1lY7L5lPGv-HyqZx7TukNTF2rrAwuQeWNUku4dNMrsWZBnHKnJYZOlN"
@@ -45,7 +49,7 @@ discord_message(get_local_ip())'
 
 app = Flask(__name__)
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
 
 video_frames_queue = []
 audio_datas_queue = []
@@ -85,7 +89,7 @@ def emit_video_frames():
             _, encoded_image = cv2.imencode(".jpg", processed_frame)
             video_frames_queue.append(encoded_image.tobytes())
 
-        time.sleep(1 / 30)  # Maintain 30 FPS
+        socketio.sleep(1 / 15)  # Maintain 30 FPS
 
     vc.release()
 
@@ -94,11 +98,12 @@ def emit_data():
     while not stop_event.is_set():
         with lock:
             if video_frames_queue and audio_datas_queue:
+                print('Emitting')
                 socketio.emit('video_frame', {'frame': video_frames_queue[-1], 'audio_data': audio_datas_queue[-1]})
                 video_frames_queue.pop(-1)
                 audio_datas_queue.pop(-1)
 
-        time.sleep(1 / 30)
+        socketio.sleep(1 / 15)
 
 if __name__ == '__main__':
     try:
