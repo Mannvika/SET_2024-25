@@ -10,7 +10,7 @@ import threading
 import numpy as np
 from fall_detection_system import FallDetectionSystem
 import time
-import eventlet
+import queue
 
 '''
 webhook = "https://discord.com/api/webhooks/1329639907442036769/5ShE26g-ZleAN1lY7L5lPGv-HyqZx7TukNTF2rrAwuQeWNUku4dNMrsWZBnHKnJYZOlN"
@@ -53,6 +53,10 @@ socketio = SocketIO(app, async_mode="eventlet", cors_allowed_origins="*")
 
 video_frames_queue = []
 audio_datas_queue = []
+
+frame_buffer = queue.Queue(maxsize=6)
+audio_buffer = queue.Queue(maxsize=6)
+
 SAMPLE_RATE = 44100
 CHUNK_SIZE = 1024
 lock = threading.Lock()
@@ -63,7 +67,7 @@ def capture_audio():
     def audio_callback(indata, frames, time, status):
         if status:
             print(status)
-        audio_datas_queue.append(indata.tolist())
+        audio_buffer.put(indata.tolist())
 
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
         while not stop_event.is_set():
@@ -85,9 +89,10 @@ def emit_video_frames():
 
         processed_frame = fall_system.process_frame(frame)
 
+    if not frame_buffer.full():
         with lock:
             _, encoded_image = cv2.imencode(".jpg", processed_frame)
-            video_frames_queue.append(encoded_image.tobytes())
+            frame_buffer.put(encoded_image.tobytes())
 
         socketio.sleep(1 / 15)  # Maintain 30 FPS
 
@@ -97,11 +102,13 @@ def emit_data():
     """Emit video and audio data to the client."""
     while not stop_event.is_set():
         with lock:
-            if video_frames_queue and audio_datas_queue:
+            if frame_buffer.qsize() >= 6:
                 print('Emitting')
-                socketio.emit('video_frame', {'frame': video_frames_queue[-1], 'audio_data': audio_datas_queue[-1]})
-                video_frames_queue.pop(-1)
-                audio_datas_queue.pop(-1)
+                frame = frame_buffer.get_nowait()
+                audio_data = []
+                if not audio_buffer.empty():
+                    audio_data = audio_buffer.get_nowait()
+                socketio.emit('video_frame', {'frame': frame, 'audio_data': audio_data})
 
         socketio.sleep(1 / 15)
 
