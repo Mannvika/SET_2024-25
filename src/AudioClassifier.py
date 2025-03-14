@@ -126,12 +126,13 @@ class AudioClassifier:
         if res is None:
             print("Inference failed.")
             return None
+            
+        for res, audio in runner.classifier(self.device_ID):
+            print(f'Result ({res["timing"]["dsp"] + res["timing"]["classification"]} ms)')
 
-        print(f'Result ({res["timing"]["dsp"] + res["timing"]["classification"]} ms)')
-
-        # Get classification with highest probability
-        classification = max(res['result']['classification'], key=res['result']['classification'].get)
-        score = res['result']['classification'][classification]
+            # Get classification with highest probability
+            classification = max(res['result']['classification'], key=res['result']['classification'].get)
+            score = res['result']['classification'][classification]
 
         print(f"Detected: {classification} ({score:.2f})")
         return classification, score
