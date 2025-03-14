@@ -27,7 +27,7 @@ function App() {
             console.log('Received video frame');
             console.log('Audio data:', data.audio_data);
 
-            const imageBlob = new Blob([new Uint8Array(data.frame)], { type: "image/jpeg" });
+            const imageBlob = new Blob([new Uint8Array(data.frame)], { type: "image/h264" });
             const imageUrl = URL.createObjectURL(imageBlob);
             setImageSrc(imageUrl);
         });
