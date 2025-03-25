@@ -75,19 +75,28 @@ def capture_audio():
     def audio_callback(indata, frames, time, status):
         if status:
             print(status)
-        audio_datas_queue.append(indata.tolist())
-        audio_classifier.audio_queue.append(indata.tolist())
+        with lock:
+            audio_datas_queue.append(indata.tolist())
+            audio_classifier.audio_queue.append(indata.tolist())
         
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
-        with AudioImpulseRunner(MODEL_PATH) as runner:
-            print("Listening for screams...")
+        runner = AudioImpulse(MODEL_PATH)
+        try:
+            model_info = runner.init()
+            print("Model initialized:", model_info)
 
+            print("Listening for screams...")
             while not stop_event.is_set():
                 if not audio_classifier.audio_queue.empty():
                     scores = audio_classifier.classify_audio(runner)
-                    if any(score >= 0.7 for score in scores):  # If scream detected
-                        print("Scream detected!")
+                    print(scores)
                 time.sleep(0.1)  # Prevent CPU overload
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            runner.stop()
+        
+
 
 def emit_video_frames():
     """Capture video frames, compress them, and send them to the client."""
