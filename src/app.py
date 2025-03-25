@@ -70,7 +70,7 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 def capture_audio():
     """Capture audio in real-time and send to the client."""
-    audio_classifier = AudioClassifier(device_id) # Change as needed
+    audio_classifier = AudioClassifierRunner(device_id) # Change as needed
 
     def audio_callback(indata, frames, time, status):
         if status:
