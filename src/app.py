@@ -12,6 +12,10 @@ from fall_detection_system import FallDetectionSystem
 import time
 from collections import deque
 
+# From Communications
+from edge_impulse_linux.audio import AudioImpulseRunner
+from AudioClassifier import AudioClassifier
+import queue
 '''
 webhook = "https://discord.com/api/webhooks/1329639907442036769/5ShE26g-ZleAN1lY7L5lPGv-HyqZx7TukNTF2rrAwuQeWNUku4dNMrsWZBnHKnJYZOlN"
 
@@ -60,17 +64,30 @@ stop_event = threading.Event()  # Stop signal for threads
 starttime = time.time()
 
 compressFrame = False
+device_id = 0 # Change if needed
+
+MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 def capture_audio():
     """Capture audio in real-time and send to the client."""
+    audio_classifier = AudioClassifier(device_id) # Change as needed
+
     def audio_callback(indata, frames, time, status):
         if status:
             print(status)
         audio_datas_queue.append(indata.tolist())
-
+        audio_classifier.audio_queue.append(indata.tolist())
+        
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
-        while not stop_event.is_set():
-            time.sleep(0.1)  # Prevent CPU overload
+        with AudioImpulseRunner(MODEL_PATH) as runner:
+            print("Listening for screams...")
+
+            while not stop_event.is_set():
+                if not audio_classifier.audio_queue.empty():
+                    scores = audio_classifier.classify_audio(runner)
+                    if any(score >= 0.7 for score in scores):  # If scream detected
+                        print("Scream detected!")
+                time.sleep(0.1)  # Prevent CPU overload
 
 def emit_video_frames():
     """Capture video frames, compress them, and send them to the client."""

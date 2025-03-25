@@ -3,17 +3,10 @@ import numpy as np
 import sounddevice as sd
 import queue
 
-MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
-
 class AudioClassifier:
     def __init__(self, device_id: int):
         self.device_ID = device_id
         self.audio_queue = queue.Queue()
-
-    def audio_callback(self, indata, frames, time, status):
-        if status:
-            print("Audio Input Error:", status)
-        self.audio_queue.put(indata.copy())
 
     def classify_audio(self, runner):
         model_info = runner.init()
@@ -36,21 +29,3 @@ class AudioClassifier:
                     continue
                 screaming_scores.append(score)
         return screaming_scores
-
-    def start_listening(self, audio_queue):
-        with AudioImpulseRunner(MODEL_PATH) as runner:
-            with sd.InputStream(callback=self.audio_callback, channels=2, samplerate=44100, blocksize=512, device=self.device_ID):
-                print("Listening...")
-                while True:
-                    scores = self.classify_audio(runner)
-                    for score in scores:
-                        if score >= 0.7:
-                            print("This is actually a scream post-processing.")
-                            audio_queue.put("Scream detected!")
-
-
-def audio_process(audio_queue):
-    """Runs scream detection in a separate process"""
-    device_id = 0  # Adjust as needed
-    scream_detector = AudioClassifier(device_id)
-    scream_detector.start_listening(audio_queue)
