@@ -11,6 +11,7 @@ import numpy as np
 from fall_detection_system import FallDetectionSystem
 import time
 from collections import deque
+import matplotlib.pyplot as plt
 
 '''
 webhook = "https://discord.com/api/webhooks/1329639907442036769/5ShE26g-ZleAN1lY7L5lPGv-HyqZx7TukNTF2rrAwuQeWNUku4dNMrsWZBnHKnJYZOlN"
@@ -110,7 +111,7 @@ def emit_data():
                 video_frames_queue.popleft()
                 audio_datas_queue.popleft()
                 print(len(video_frames_queue))
-                #framerate = 1 / ( 2 * len(video_frames_queue) + 1)
+                framerate = max(0.01, 1 / (2 * len(video_frames_queue) + 1))
         socketio.sleep(framerate)
 
 if __name__ == '__main__':
