@@ -75,9 +75,11 @@ def capture_audio():
     def audio_callback(indata, frames, time, status):
         if status:
             print(status)
+
         with lock:
             audio_datas_queue.append(indata.tolist())
-            audio_classifier.audio_queue.append(indata.tolist())
+            audio_classifier.audio_queue.put(indata.tolist())
+
         
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
         runner = AudioImpulse(MODEL_PATH)
