@@ -6,7 +6,6 @@ from flask_cors import CORS
 from flask_socketio import SocketIO
 import cv2
 import sounddevice as sd
-import threading
 import numpy as np
 from fall_detection_system import FallDetectionSystem
 import time
@@ -16,40 +15,6 @@ from collections import deque
 from edge_impulse_linux.audio import AudioImpulseRunner
 from AudioClassifier import AudioClassifier
 import queue
-'''
-webhook = "https://discord.com/api/webhooks/1329639907442036769/5ShE26g-ZleAN1lY7L5lPGv-HyqZx7TukNTF2rrAwuQeWNUku4dNMrsWZBnHKnJYZOlN"
-
-def get_local_ip():
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.settimeout(0)
-    try:
-        s.connect(("8.8.8.8", 80))  # Connects to Google DNS (doesn't actually send data)
-        ip = s.getsockname()[0]
-    except Exception:
-        ip = "Unable to determine local IP"
-    finally:
-        s.close()
-    return ip
-
-def discord_message(ip):
-    message = {
-        "embeds": [{
-        "title": f"IP Address",
-        "color": 65280,
-        "description": f"{ip}:8000"
-        }]
-    }
-
-    x = requests.post(webhook, json=message)
-    if x.status_code == 204:
-        print("success")
-    else:
-        print("failed")
-        
-
-print("Local Network IP Address:", get_local_ip())
-discord_message(get_local_ip())'
-'''
 
 app = Flask(__name__)
 CORS(app)
@@ -59,18 +24,17 @@ video_frames_queue = deque()
 audio_datas_queue = deque()
 SAMPLE_RATE = 44100
 CHUNK_SIZE = 1024
-lock = threading.Lock()
-stop_event = threading.Event()  # Stop signal for threads
-starttime = time.time()
+lock = eventlet.semaphore.Semaphore()
+stop_event = eventlet.event.Event()
 
 compressFrame = False
-device_id = 0 # Change if needed
+device_id = 0  # Change if needed
 
 MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 def capture_audio():
     """Capture audio in real-time and send to the client."""
-    audio_classifier = AudioClassifierRunner(device_id) # Change as needed
+    audio_classifier = AudioClassifier(device_id)  # Change as needed
 
     def audio_callback(indata, frames, time, status):
         if status:
@@ -80,25 +44,22 @@ def capture_audio():
             audio_datas_queue.append(indata.tolist())
             audio_classifier.audio_queue.put(indata.tolist())
 
-        
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
-        runner = AudioImpulse(MODEL_PATH)
+        runner = AudioImpulseRunner(MODEL_PATH)
         try:
             model_info = runner.init()
             print("Model initialized:", model_info)
 
             print("Listening for screams...")
-            while not stop_event.is_set():
+            while not stop_event.ready():
                 if not audio_classifier.audio_queue.empty():
                     scores = audio_classifier.classify_audio(runner)
                     print(scores)
-                time.sleep(0.1)  # Prevent CPU overload
+                eventlet.sleep(0.1)  # Prevent CPU overload
         except Exception as e:
             print(f"Error: {e}")
         finally:
             runner.stop()
-        
-
 
 def emit_video_frames():
     """Capture video frames, compress them, and send them to the client."""
@@ -109,7 +70,7 @@ def emit_video_frames():
         print("Error: Could not open video stream.")
         return
 
-    while not stop_event.is_set():
+    while not stop_event.ready():
         rval, frame = vc.read()
         if not rval:
             break
@@ -124,38 +85,32 @@ def emit_video_frames():
             _, encoded_image = cv2.imencode(".jpg", processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
             video_frames_queue.append(encoded_image.tobytes())
 
-        socketio.sleep(0.000001)  # Maintain 30 FPS
+        eventlet.sleep(0.001)  # Maintain 30 FPS
 
     vc.release()
 
 def emit_data():
     """Emit video and audio data to the client."""
-    framerate = 1/ 100000000000
-    while not stop_event.is_set():
+    framerate = 1 / 100000000000
+    while not stop_event.ready():
         with lock:
-            if video_frames_queue and audio_datas_queue and (time.time() - starttime > 10):
+            if video_frames_queue and audio_datas_queue:
                 socketio.emit('video_frame', {'frame': video_frames_queue[-1], 'audio_data': audio_datas_queue[-1]})
                 video_frames_queue.popleft()
                 audio_datas_queue.popleft()
                 print(len(video_frames_queue))
-                #framerate = 1 / ( 2 * len(video_frames_queue) + 1)
-        socketio.sleep(framerate)
+        eventlet.sleep(framerate)
 
 if __name__ == '__main__':
     try:
-        starttime = time.time()
-        audio_thread = threading.Thread(target=capture_audio, daemon=True)
-        video_thread = threading.Thread(target=emit_video_frames, daemon=True)
-        emitter_thread = threading.Thread(target=emit_data, daemon=True)
+        eventlet.spawn(capture_audio)
+        eventlet.spawn(emit_video_frames)
+        eventlet.spawn(emit_data)
 
-        audio_thread.start()
-        video_thread.start()
-        emitter_thread.start()
-
-        socketio.run(app, host="0.0.0.0", port=8000, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
+        socketio.run(app, host="0.0.0.0", port=8000, debug=False, use_reloader=False)
 
     except KeyboardInterrupt:
         print("\nCtrl+C detected! Stopping all threads...")
-        stop_event.set()
-        time.sleep(1)  # Allow threads to exit gracefully
+        stop_event.send()
+        eventlet.sleep(1)  # Allow threads to exit gracefully
         print("Shutdown complete.")
