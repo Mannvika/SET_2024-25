@@ -5,9 +5,9 @@ class LidarRead:
     """
     Reads LiDar distances from Arduino
     """
-    def __init__(self, _port: str, _baudrate: int, _timeout: int):
+    def __init__(self, _port: str, _baudrate: int, _timeout: float):
         self.arduino = serial.Serial(port=_port, baudrate=_baudrate, timeout=_timeout)
-        time.sleep(0.5) #reset time
+        time.sleep(0.5) #reset time 
 
     def lidar_read(self):
         try:

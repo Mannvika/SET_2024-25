@@ -1,12 +1,13 @@
 import cv2
 import logging
 from fall_detection_system import FallDetectionSystem
+from lidar_read import LidarRead
 
 def main():
     """
     Main function to run the Fall Detection System.
     """
-    # Configure logging
+    # Configure logging 
     logging.basicConfig(level=logging.INFO)
 
     import torch
@@ -14,7 +15,7 @@ def main():
     print("Device Name:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "No GPU detected")
 
     # Path to the YOLO pose estimation model
-    model_path = '../yolo11x-pose (1).pt'
+    model_path = '..\\yolo11x-pose (1).pt'
 
     # Initialize the Fall Detection System
     fall_detection_system = FallDetectionSystem(model_path)
@@ -28,6 +29,9 @@ def main():
     # Attempt to set resolution; note that the actual capture size may vary
     video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
     video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
+    #Initialize Lidar Reading Class
+    ldr = LidarRead("COM5", 9600, 0.1)
 
     logging.info("Fall Detection System is running. Press 'q' to quit.")
 
@@ -46,6 +50,7 @@ def main():
 
         # Display the processed frame in a window
         cv2.imshow('Fall Detection System', processed_frame)
+        ldr.lidar_read
 
         # Exit the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
