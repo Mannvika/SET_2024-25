@@ -57,6 +57,29 @@ lock = threading.Lock()
 video_thread = None
 video_stop_event = threading.Event()
 
+@socketio.on("connect")
+def handle_connect():
+    print("Client connected")
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    print("Client disconnected")
+
+@socketio.on("controller_input")
+def handle_controller_input(data):
+    if "dpad" in data and data["dpad"]:
+        dpad_buttons = ", ".join(data["dpad"])
+        print(f"D-Pad Pressed: {dpad_buttons}")
+
+        # Send to React UI logs
+        socketio.emit("log", {"message": f"D-Pad Pressed: {dpad_buttons}"})
+
+@socketio.on("toggle_video")
+def toggle_video(data):
+    action = data["action"]
+    print(f"Video toggle request: {action}")
+    socketio.emit("video_status", {"status": "running" if action == "start" else "stopped"})
+
 def log_inference_time(inference_time):
     """Send inference log to frontend via SocketIO"""
     print(f"Sending log: Inference time: {inference_time}ms")  # Print statement before sending log
