@@ -11,24 +11,20 @@ class LidarRead:
 
     def lidar_read(self):
         try:
-            while True:
-                data = self.arduino.readline().decode('utf-8').strip()
-                if data:
-                    try:
-                        parts = data.split('\t')
+            data = self.arduino.readline().decode('utf-8').strip()
+            if data:
+                try:
+                    parts = data.split('\t')
 
-                        distance_str = parts[0].split('=')[1].strip()
-                        strength_str = parts[1].split('=')[1].strip()
+                    distance_str = parts[0].split('=')[1].strip()
+                    strength_str = parts[1].split('=')[1].strip()
 
-                        distance = int(distance_str)
-                        strength = int(strength_str)
+                    distance = int(distance_str)
+                    strength = int(strength_str)
 
-                        print(f"Distance: {distance} cm, Strength: {strength}")
-                    except (IndexError, ValueError) as e:
-                        print(f"Error parsing data: {e}")
-                time.sleep(0.05)
+                    print(f"Distance: {distance} cm, Strength: {strength}")
+                except (IndexError, ValueError) as e:
+                    print(f"Error parsing data: {e}")
+            time.sleep(0.05)
         except KeyboardInterrupt:
             print("\nStopping LiDAR read process.")
-        finally:
-            self.arduino.close()
-            print("Serial connection closed.")

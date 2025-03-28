@@ -31,7 +31,7 @@ def main():
     video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
     #Initialize Lidar Reading Class
-    ldr = LidarRead("COM5", 9600, 0.1)
+    ldr = LidarRead("COM7", 9600, 0.1)
 
     logging.info("Fall Detection System is running. Press 'q' to quit.")
 
@@ -50,11 +50,12 @@ def main():
 
         # Display the processed frame in a window
         cv2.imshow('Fall Detection System', processed_frame)
-        ldr.lidar_read
+        ldr.lidar_read()
 
         # Exit the loop if 'q' is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
             logging.info("Exiting Fall Detection System.")
+            ldr.arduino.close()
             break
 
     # Release the video capture object and close all OpenCV windows
