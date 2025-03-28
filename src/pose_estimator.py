@@ -31,13 +31,16 @@ class PoseEstimator:
         # Perform inference using the YOLO model
         results = self.model.predict(frame, device=self.device)
 
-        if results and results[0].boxes is not None:
-            # Extract bounding boxes, keypoints, and related information
+        # Check if results exist, boxes exist, there is at least one detection, and keypoints with confidences are available.
+        if (results and results[0].boxes is not None and
+                hasattr(results[0].boxes, 'xyxy') and len(results[0].boxes.xyxy) > 0 and
+                results[0].keypoints is not None and
+                results[0].keypoints.conf is not None):
             boxes = results[0].boxes.xyxy.int().cpu().tolist()
             keypoints = results[0].keypoints.xy.int().cpu().tolist()
             keypoint_scores = results[0].keypoints.conf.cpu().tolist()
             confidences = results[0].boxes.conf.cpu().tolist()
             return boxes, keypoints, keypoint_scores, confidences, results[0]
 
-        # Return None if no detections are found
+        # If no detections are found, return None for all outputs.
         return None, None, None, None, None

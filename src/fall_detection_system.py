@@ -25,8 +25,8 @@ class FallDetectionSystem:
         # Perform pose estimation on the frame
         boxes, keypoints_list, keypoint_scores_list, confidences, result = self.pose_estimator.detect_poses(frame)
 
-        if boxes is None:
-            # Clear histories as no persons are detected
+        if boxes is None or len(boxes) == 0:
+            # Clear histories since no persons are detected
             self.fall_detector.torso_angle_history.clear()
             self.fall_detector.torso_position_history.clear()
             self.injury_analyzer.left_ankle_history.clear()
