@@ -45,7 +45,7 @@ def capture_audio():
 
     runner = AudioImpulseRunner(MODEL_PATH)
 
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE, device_id=device_id):
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE, device=device_id):
         try:
             model_info = runner.init()
             print("Model initialized:", model_info)
