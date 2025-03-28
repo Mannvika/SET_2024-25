@@ -43,8 +43,9 @@ def capture_audio():
         audio_datas_queue.append(indata.tolist())
         audio_classifier.audio_queue.put(indata.tolist())
 
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE):
-        runner = AudioImpulseRunner(MODEL_PATH)
+    runner = AudioImpulseRunner(MODEL_PATH)
+
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, callback=audio_callback, blocksize=CHUNK_SIZE, device_id=device_id):
         try:
             model_info = runner.init()
             print("Model initialized:", model_info)
@@ -97,6 +98,10 @@ def emit_data():
 
 if __name__ == '__main__':
     try:
+        print(sd.query_devices())
+        id = input("Enter Device ID: ")
+        device_id = id
+
         starttime = time.time()
         gevent.spawn(capture_audio)
         gevent.spawn(emit_video_frames)
