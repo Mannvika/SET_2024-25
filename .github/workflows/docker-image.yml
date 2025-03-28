@@ -26,5 +26,5 @@ jobs:
           context: .
           file: ./Dockerfile  # Specify Linux Dockerfile
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/set:latest
+          tags: ${{ secrets.DOCKER_USERNAME }}/set:pose-estimation
           platforms: linux/arm64/v8
