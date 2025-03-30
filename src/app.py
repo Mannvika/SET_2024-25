@@ -111,8 +111,8 @@ def emit_data():
             socketio.emit('video_frame', {'frame': video_frames_queue[-1]})
             video_frames_queue.popleft()
         
-        if classification_queue:
-            classification_result = classification_queue.popleft()
+        if result_queue:
+            classification_result = result_queue.popleft()
             socketio.emit('audio_classification', {'result': classification_result})
 
         if audio_queue:
