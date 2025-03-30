@@ -43,17 +43,17 @@ def capture_audio():
         # Capture audio data in chunks
         audio_data = sd.rec(CHUNK_SIZE, device=device_id, samplerate=sampling_rate, channels=2, dtype='int16')
         sd.wait()  # Wait until the recording is finished
-        audio_queue.put(audio_data)  # Put the captured audio into the queue
-        classification_queue.put(audio_data)
+        audio_queue.append(audio_data)  # Put the captured audio into the queue
+        classification_queue.append(audio_data)
         gevent.sleep(0.5)  # Adjust based on your real-time performance needs
 
 def classify_audio():
     """Classify audio data in real-time."""
     features = np.array([], dtype=np.int16)  # Buffer to hold audio data
     while True:
-        if not audio_queue.empty():
+        if audio_queue:
             # Get the latest chunk of audio from the queue
-            audio_data = classification_queue.get()
+            audio_data = classification_queue.popleft()
 
             # Add the new audio data to the buffer
             features = np.concatenate((features, audio_data), axis=0)
@@ -134,6 +134,7 @@ if __name__ == '__main__':
         window_size = model_info['model_parameters']['input_features_count']
         sampling_rate = model_info['model_parameters']['frequency']
         print(f"Loaded model: {model_info['project']['owner']} / {model_info['project']['name']}")
+        print("Model Sampling Rate: " + sampling_rate)
 
         starttime = time.time()
         gevent.spawn(capture_audio)
