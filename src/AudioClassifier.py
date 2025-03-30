@@ -3,9 +3,15 @@ import numpy as np
 import sounddevice as sd
 import queue
 
+MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
+
 class AudioClassifier:
     def __init__(self, device_id: int):
         self.device_ID = device_id
+        runner = AudioImpulseRunner(MODEL_PATH)
+        model_info = runner.init()                
+        labels = model_info['model_parameters']['labels']
+        print(f"Loaded model: {model_info['project']['owner']} / {model_info['project']['name']}")
 
     def classify_audio(self, runner):
         model_info = runner.init()
@@ -25,11 +31,4 @@ class AudioClassifier:
 
         print("completed classify audio")
         return screaming_scores
-    
-if __name__ == '__main__':
-    print(sd.query_devices())
-    device_id = int(input('Device ID: '))
-    audioClassifier = AudioClassifier(device_id)
-    MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
-    runner = AudioImpulseRunner(MODEL_PATH)
-    audioClassifier.classify_audio(runner)
+

@@ -22,9 +22,12 @@ CORS(app)
 socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 
 video_frames_queue = deque()
-audio_datas_queue = deque()
-SAMPLE_RATE = 44100
-CHUNK_SIZE = 512
+audio_queue = deque()
+classification_queue = deque()
+result_queue = deque()
+#SAMPLE_RATE = 44100
+CHUNK_SIZE = 1024
+OVERLAP = 0.25
 starttime = time.time()
 
 compressFrame = False
@@ -34,56 +37,47 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 def capture_audio():
     """Capture audio in real-time and send to the client."""
+    #audio_classifier = AudioClassifier(device_id)
 
-
-    with AudioImpulseRunner(MODEL_PATH) as runner:
-        try:
-            model_info = runner.init()
-            labels = model_info['model_parameters']['labels']
-            print('Loaded runner for "' + model_info['project']['owner'] + ' / ' + model_info['project']['name'] + '"')
-
-            for res, audio in runner.classifier(device_id=selected_device_id):
-                print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
-                for label in labels:
-                    score = res['result']['classification'][label]
-                    print('%s: %.2f\t' % (label, score), end='')
-                print('', flush=True)
-        finally:
-            if (runner):
-                runner.stop()
-
-
-    '''
-    audio_classifier = AudioClassifier(device_id)
-
-    def audio_callback(indata, frames, time, status):
-        if status:
-            print(status)
-
-        #print(indata.tolist())
-        #audio_datas_queue.append(indata.tolist())
-
-    runner = AudioImpulseRunner(MODEL_PATH)
     while True:
-        scores = audio_classifier.classify_audio(runner)
-        print(scores)
-        gevent.sleep(5)
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=2, callback=audio_callback, blocksize=CHUNK_SIZE, device=device_id, latency='low'):
-        try:
-            model_info = runner.init()
-            print("Model initialized:", model_info)
+        # Capture audio data in chunks
+        audio_data = sd.rec(CHUNK_SIZE, samplerate=sampling_rate, channels=2, dtype='int16')
+        sd.wait()  # Wait until the recording is finished
+        audio_queue.put(audio_data)  # Put the captured audio into the queue
+        classification_queue.put(audio_data)
+        gevent.sleep(0.5)  # Adjust based on your real-time performance needs
 
-            print("Listening for screams...")
-            while True:
-                if not audio_classifier.audio_queue.empty():
-                    scores = audio_classifier.classify_audio(runner)
-                    print(scores)
-                gevent.sleep(1)  # Prevent CPU overload
-        except Exception as e:
-            print(f"Error: {e}")
-        finally:
-            runner.stop()
-    '''
+def classify_audio():
+    """Classify audio data in real-time."""
+    features = np.array([], dtype=np.int16)  # Buffer to hold audio data
+    while True:
+        if not audio_queue.empty():
+            # Get the latest chunk of audio from the queue
+            audio_data = classification_queue.get()
+
+            # Add the new audio data to the buffer
+            features = np.concatenate((features, audio_data), axis=0)
+
+            # Check if we have enough data to classify
+            while len(features) >= window_size:
+                # Extract a window of audio data for classification
+                window = features[:window_size]
+
+                # Classify the window of audio data
+                res = runner.classify(window.tolist())
+
+                result_queue.append(res)
+
+                # Output the results
+                print(f"Result: {res[0]['result']}")  # Assuming classify returns a list of results
+                for label in labels:
+                    score = res[0]['result']['classification'][label]
+                    print(f"{label}: {score:.2f}")
+
+                # Remove the processed window from the buffer
+                features = features[int(window_size * (1 - OVERLAP)):]
+
+            gevent.sleep(0.5)
 
 def emit_video_frames():
     """Capture video frames, compress them, and send them to the client."""
@@ -113,12 +107,19 @@ def emit_video_frames():
 def emit_data():
     """Emit video and audio data to the client."""
     while True:
-        if video_frames_queue and audio_datas_queue and (time.time() - starttime > 10):
-            socketio.emit('video_frame', {'frame': video_frames_queue[-1], 'audio_data': audio_datas_queue[-1]})
+        if video_frames_queue and (time.time() - starttime > 10):
+            socketio.emit('video_frame', {'frame': video_frames_queue[-1]})
             video_frames_queue.popleft()
-            audio_datas_queue.popleft()
-            print(len(video_frames_queue))
-        gevent.sleep(0.001)
+        
+        if classification_queue:
+            classification_result = classification_queue.popleft()
+            socketio.emit('audio_classification', {'result': classification_result})
+
+        if audio_queue:
+            socketio.emit('audio_data', {'chunk': audio_queue[-1]})
+            audio_queue.popleft()
+
+        gevent.sleep(0.01)  # Short sleep for responsivenes
 
 if __name__ == '__main__':
     try:
@@ -126,8 +127,17 @@ if __name__ == '__main__':
         id = int(input("Enter Device ID: "))
         device_id = id
 
+        global runner, labels, window_size, sampling_rate
+        runner = AudioImpulseRunner(MODEL_PATH)
+        model_info = runner.init()                
+        labels = model_info['model_parameters']['labels']
+        window_size = model_info['model_parameters']['input_features_count']
+        sampling_rate = model_info['model_parameters']['frequency']
+        print(f"Loaded model: {model_info['project']['owner']} / {model_info['project']['name']}")
+
         starttime = time.time()
         gevent.spawn(capture_audio)
+        gevent.spawn(classify_audio)
         gevent.spawn(emit_video_frames)
         gevent.spawn(emit_data)
 
