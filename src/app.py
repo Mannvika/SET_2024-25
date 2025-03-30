@@ -41,17 +41,20 @@ def capture_audio():
 
     while True:
         # Capture audio data in chunks
-        audio_data = sd.rec(CHUNK_SIZE, device=device_id, samplerate=sampling_rate, channels=2, dtype='int16')
-        sd.wait()  # Wait until the recording is finished
+        print("Capturing audio")
+        audio_data = sd.rec(CHUNK_SIZE, device=device_id, samplerate=44100, channels=2, dtype='int16')
+        gevent.sleep(0.001)
+        #sd.wait()  # Wait until the recording is finished
         audio_queue.append(audio_data)  # Put the captured audio into the queue
         classification_queue.append(audio_data)
+        print("Finished capturing audio")
         gevent.sleep(0.5)  # Adjust based on your real-time performance needs
 
 def classify_audio():
     """Classify audio data in real-time."""
     features = np.array([], dtype=np.int16)  # Buffer to hold audio data
     while True:
-        if audio_queue:
+        if len(classification_queue) > 0:
             # Get the latest chunk of audio from the queue
             audio_data = classification_queue.popleft()
 
@@ -77,7 +80,7 @@ def classify_audio():
                 # Remove the processed window from the buffer
                 features = features[int(window_size * (1 - OVERLAP)):]
 
-            gevent.sleep(0.5)
+            gevent.sleep(0.01)
 
 def emit_video_frames():
     """Capture video frames, compress them, and send them to the client."""
@@ -134,7 +137,7 @@ if __name__ == '__main__':
         window_size = model_info['model_parameters']['input_features_count']
         sampling_rate = model_info['model_parameters']['frequency']
         print(f"Loaded model: {model_info['project']['owner']} / {model_info['project']['name']}")
-        print("Model Sampling Rate: " + sampling_rate)
+        print("Model Sampling Rate: ", sampling_rate)
 
         starttime = time.time()
         gevent.spawn(capture_audio)
