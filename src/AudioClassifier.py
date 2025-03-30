@@ -32,4 +32,4 @@ if __name__ == '__main__':
     audioClassifier = AudioClassifier(device_id)
     MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
     runner = AudioImpulseRunner(MODEL_PATH)
-    audioClassifier.classify_audio
+    audioClassifier.classify_audio(runner)
