@@ -23,8 +23,8 @@ socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 
 video_frames_queue = deque()
 audio_datas_queue = deque()
-SAMPLE_RATE = 16000
-CHUNK_SIZE = 1024
+SAMPLE_RATE = 44100
+CHUNK_SIZE = 512
 starttime = time.time()
 
 compressFrame = False
@@ -41,12 +41,11 @@ def capture_audio():
             print(status)
 
         #print(indata.tolist())
-        audio_datas_queue.append(indata.tolist())
-        audio_classifier.audio_queue.put(indata.tolist())
+        #audio_datas_queue.append(indata.tolist())
 
     runner = AudioImpulseRunner(MODEL_PATH)
 
-    with sd.InputStream(samplerate=SAMPLE_RATE, channels=2, callback=audio_callback, blocksize=CHUNK_SIZE, device=device_id):
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=2, callback=audio_callback, blocksize=CHUNK_SIZE, device=device_id, latency='low'):
         try:
             model_info = runner.init()
             print("Model initialized:", model_info)
@@ -56,7 +55,7 @@ def capture_audio():
                 if not audio_classifier.audio_queue.empty():
                     scores = audio_classifier.classify_audio(runner)
                     print(scores)
-                gevent.sleep(0.1)  # Prevent CPU overload
+                gevent.sleep(1)  # Prevent CPU overload
         except Exception as e:
             print(f"Error: {e}")
         finally:
