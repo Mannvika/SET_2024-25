@@ -34,6 +34,26 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 def capture_audio():
     """Capture audio in real-time and send to the client."""
+
+
+    with AudioImpulseRunner(MODEL_PATH) as runner:
+        try:
+            model_info = runner.init()
+            labels = model_info['model_parameters']['labels']
+            print('Loaded runner for "' + model_info['project']['owner'] + ' / ' + model_info['project']['name'] + '"')
+
+            for res, audio in runner.classifier(device_id=selected_device_id):
+                print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
+                for label in labels:
+                    score = res['result']['classification'][label]
+                    print('%s: %.2f\t' % (label, score), end='')
+                print('', flush=True)
+        finally:
+            if (runner):
+                runner.stop()
+
+
+    '''
     audio_classifier = AudioClassifier(device_id)
 
     def audio_callback(indata, frames, time, status):
@@ -48,7 +68,6 @@ def capture_audio():
         scores = audio_classifier.classify_audio(runner)
         print(scores)
         gevent.sleep(5)
-    '''
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=2, callback=audio_callback, blocksize=CHUNK_SIZE, device=device_id, latency='low'):
         try:
             model_info = runner.init()
