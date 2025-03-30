@@ -35,20 +35,19 @@ device_id = 0  # Change if needed
 
 MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
+def audio_callback(indata, frames, time, status):
+    """Callback function to capture audio."""
+    if status:
+        print("Error:", status)
+    audio_queue.append(indata)  # Add captured audio to the queue
+    classification_queue.append(indata)  # Also add to classification queue
+
 def capture_audio():
     """Capture audio in real-time and send to the client."""
-    #audio_classifier = AudioClassifier(device_id)
-
-    while True:
-        # Capture audio data in chunks
-        print("Capturing audio")
-        audio_data = sd.rec(CHUNK_SIZE, device=device_id, samplerate=44100, channels=2, dtype='int16')
-        gevent.sleep(0.001)
-        #sd.wait()  # Wait until the recording is finished
-        audio_queue.append(audio_data)  # Put the captured audio into the queue
-        classification_queue.append(audio_data)
-        print("Finished capturing audio")
-        gevent.sleep(0.5)  # Adjust based on your real-time performance needs
+    with sd.InputStream(callback=audio_callback, channels=2, samplerate=44100, dtype='int16', blocksize=CHUNK_SIZE):
+        print("Starting audio capture...")
+        while True:
+            gevent.sleep(0.5)  # Yield control to other greenlets
 
 def classify_audio():
     """Classify audio data in real-time."""
