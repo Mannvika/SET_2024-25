@@ -62,8 +62,10 @@ def classify_audio():
             # Get the latest chunk of audio from the queue
             audio_data = classification_queue.popleft()
 
+            audio_data_flattened = audio_data.flatten()
+
             # Add the new audio data to the buffer
-            features = np.concatenate((features, audio_data), axis=0)
+            features = np.concatenate((features, audio_data_flattened), axis=0)
 
             # Check if we have enough data to classify
             while len(features) >= window_size:
