@@ -30,6 +30,8 @@ CHUNK_SIZE = 1024
 OVERLAP = 0.25
 starttime = time.time()
 
+MAX_SIZE = 5
+
 compressFrame = False
 device_id = 0  # Change if needed
 
@@ -39,8 +41,11 @@ def audio_callback(indata, frames, time, status):
     """Callback function to capture audio."""
     if status:
         print("Error:", status)
-    audio_queue.append(indata)  # Add captured audio to the queue
-    classification_queue.append(indata)  # Also add to classification queue
+    if len(audio_queue) < MAX_SIZE:
+        audio_queue.append(indata)  # Add captured audio to the queue
+
+    if len(classification_queue) < MAX_SIZE:
+        classification_queue.append(indata)  # Also add to classification queue
 
 def capture_audio():
     """Capture audio in real-time and send to the client."""
