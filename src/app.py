@@ -41,7 +41,7 @@ def capture_audio():
 
     while True:
         # Capture audio data in chunks
-        audio_data = sd.rec(CHUNK_SIZE, samplerate=sampling_rate, channels=2, dtype='int16')
+        audio_data = sd.rec(CHUNK_SIZE, device=device_id, samplerate=sampling_rate, channels=2, dtype='int16')
         sd.wait()  # Wait until the recording is finished
         audio_queue.put(audio_data)  # Put the captured audio into the queue
         classification_queue.put(audio_data)
