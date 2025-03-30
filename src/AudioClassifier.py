@@ -25,3 +25,11 @@ class AudioClassifier:
 
         print("completed classify audio")
         return screaming_scores
+    
+if __name__ == '__main__':
+    print(sd.query_devices())
+    device_id = int(input('Device ID: '))
+    audioClassifier = AudioClassifier(device_id)
+    MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
+    runner = AudioImpulseRunner(MODEL_PATH)
+    audioClassifier.classify_audio

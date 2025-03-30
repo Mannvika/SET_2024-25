@@ -44,7 +44,11 @@ def capture_audio():
         #audio_datas_queue.append(indata.tolist())
 
     runner = AudioImpulseRunner(MODEL_PATH)
-
+    while True:
+        scores = audio_classifier.classify_audio(runner)
+        print(scores)
+        gevent.sleep(5)
+    '''
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=2, callback=audio_callback, blocksize=CHUNK_SIZE, device=device_id, latency='low'):
         try:
             model_info = runner.init()
@@ -60,6 +64,7 @@ def capture_audio():
             print(f"Error: {e}")
         finally:
             runner.stop()
+    '''
 
 def emit_video_frames():
     """Capture video frames, compress them, and send them to the client."""
