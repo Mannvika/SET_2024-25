@@ -33,41 +33,52 @@ MODEL_SAMPLE_RATE = 16000
 CAPTURE_SAMPLE_RATE = 44100
 CHUNK_SIZE = int(MODEL_SAMPLE_RATE * 0.1)  # 100ms chunks for 16kHz
 OVERLAP = 0.25
-window_size = 0  # Will be set from model
+#window_size = 0  # Will be set from model
+device_id = 0 # Set device id
+
+MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 # System State
 compressFrame = False
-runner = None
-labels = []
+#runner = None
+#labels = []
 
 def audio_callback(indata, frames, time, status):
     """Audio capture callback with resampling"""
     if status:
         print("Audio error:", status)
     try:
+        # Stereo to mono conversion
+        mono_audio = np.mean(indata, axis=1).astype(np.float32)
+
         # Resample to model's expected rate
         resampled = librosa.resample(
-            indata.T, 
+            mono_audio.T,
             orig_sr=CAPTURE_SAMPLE_RATE,
             target_sr=MODEL_SAMPLE_RATE
-        )
+        ).reshape(-1, 1)
+        
         classification_queue.put_nowait(resampled)
-        audio_queue.put_nowait(indata.copy())
+        audio_queue.put_nowait(mono_audio)
     except Exception as e:
         print(f"Audio processing error: {str(e)}")
 
 def capture_audio():
     """Non-blocking audio capture greenlet"""
-    with sd.InputStream(
-        callback=audio_callback,
-        channels=1,
-        samplerate=CAPTURE_SAMPLE_RATE,
-        dtype='float32',
-        blocksize=CHUNK_SIZE
-    ):
-        print("Audio capture running...")
-        while True:
-            gevent.sleep(0.1)
+    try:
+        with sd.InputStream(
+            callback=audio_callback,
+            channels=2,
+            samplerate=CAPTURE_SAMPLE_RATE,
+            dtype='float32',
+            blocksize=CHUNK_SIZE,
+            device=device_id
+        ):
+            print("Audio capture running...")
+            while True:
+                gevent.sleep(0.1)
+    except Exception as e:
+        print(f"Error initializing audio stream: {str(e)}")
 
 def classify_audio():
     """Async classification using thread pool"""
@@ -79,7 +90,7 @@ def classify_audio():
             # Build audio window
             while features.shape[0] < window_size:
                 chunk = classification_queue.get(timeout=1)
-                features = np.concatenate((features, chunk))
+                features = np.concatenate((features, chunk.flatten()))
 
             # Extract classification window
             window = features[:window_size]
@@ -107,10 +118,11 @@ def emit_video_frames():
     model_path = 'yolo11x-pose.pt'
     fall_system = FallDetectionSystem(model_path)
     
-    with cv2.VideoCapture(0) as vc:
-        if not vc.isOpened():
-            raise RuntimeError("Could not open video stream")
+    vc = cv2.VideoCapture(0)
+    if not vc.isOpened():
+        raise RuntimeError("Could not open video stream")
 
+    try:
         while True:
             rval, frame = vc.read()
             if not rval:
@@ -125,6 +137,8 @@ def emit_video_frames():
                                           [cv2.IMWRITE_JPEG_QUALITY, 50])
             video_frames_queue.put(encoded_image.tobytes())
             gevent.sleep(1/30)  # ~30 FPS
+    finally:
+        vc.release()
 
 def emit_data():
     """Unified data emitter with error handling"""
@@ -164,6 +178,7 @@ if __name__ == '__main__':
     try:
         # Audio model initialization
         global runner, labels, window_size
+        MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
         runner = AudioImpulseRunner(MODEL_PATH)
         model_info = runner.init()
         labels = model_info['model_parameters']['labels']
@@ -173,6 +188,11 @@ if __name__ == '__main__':
               f"{model_info['project']['name']}")
         print(f"Window: {window_size} samples "
               f"({window_size/MODEL_SAMPLE_RATE:.2f}s)")
+
+        #Device ID prompt
+        print(sd.query_devices())
+        id = int(input("Enter Device ID: "))
+        device_id = id
 
         # Start greenlets in priority order
         gevent.spawn(emit_data)
@@ -185,6 +205,12 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("\nGraceful shutdown...")
         runner.stop()
-        gevent.killall([g for g in gevent.getcurrent().parent.greenlets])
+        # Get all active greenlets
+        greenlets = [
+            g for g in gevent.get_hub().threadpool 
+            if not g.dead
+        ]
+    
+        gevent.killall(greenlets, timeout=3)
         gevent.sleep(1)
         print("Shutdown complete.")
