@@ -4,10 +4,13 @@ monkey.patch_all(thread=False, select=False)
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
+
 import cv2
+import sounddevice as sd
 import gevent
 import numpy as np
 from fall_detection_system import FallDetectionSystem
+import time
 import traceback
 from gevent.queue import Queue
 from gevent.threadpool import ThreadPool
@@ -36,6 +39,7 @@ device_id = 0  # Set device ID dynamically at runtime
 MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 # System State
+compressFrame = False
 should_run = True
 
 # Replace process_audio with official generator pattern
@@ -70,10 +74,10 @@ def emit_video_frames():
             vc.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
             vc.set(cv2.CAP_PROP_FPS, frame_rate)
 
-                while should_run:
-                    ret, frame = vc.read()
-                    if not ret:
-                        break
+            while should_run:
+                rval, frame = vc.read()
+                if not rval:
+                    break
                     
                 # Skip frames if queue is getting full
                 if video_frames_queue.qsize() > 5:
