@@ -1,5 +1,5 @@
 from gevent import monkey
-monkey.patch_all()
+monkey.patch_all(thread=False, select=False)
 
 from flask import Flask
 from flask_cors import CORS
@@ -25,10 +25,9 @@ CORS(app)
 socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 
 # Buffers
-video_frames_queue = Queue(maxsize=50)
-audio_queue = Queue(maxsize=50)
-classification_queue = Queue(maxsize=50)
-result_queue = Queue(maxsize=50)
+video_frames_queue = Queue(maxsize=10)
+audio_queue = Queue(maxsize=5)
+result_queue = Queue(maxsize=10)
 
 # Audio Config
 MODEL_SAMPLE_RATE = 16000
@@ -43,65 +42,14 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 compressFrame = False
 should_run = True
 
-# Add these new functions to handle audio processing
-def audio_capture():
-    """Continuous audio capture using sounddevice"""
-    try:
-        with sd.InputStream(samplerate=CAPTURE_SAMPLE_RATE, 
-                          channels=2,
-                          device=device_id,
-                          blocksize=CHUNK_SIZE,
-                          callback=audio_callback):
-            while should_run:
-                gevent.sleep(0.1)
-    except Exception as e:
-        print(f"Audio capture failed: {str(e)}")
-
-# Modified audio callback for stereo conversion
-def audio_callback(indata, frames, time, status):
-    if status:
-        print(f"Audio status: {status}")
-    
-    # Convert stereo to mono by averaging channels
-    mono_data = np.mean(indata, axis=1)
-    
-    # Resample to model's sample rate
-    chunk = librosa.resample(mono_data,
-                           orig_sr=CAPTURE_SAMPLE_RATE,
-                           target_sr=MODEL_SAMPLE_RATE)
-    
-    audio_queue.put(chunk.astype(np.float32))
-
-def process_audio():
-    """Audio classification worker using Edge Impulse"""
-    try:
-        pool = ThreadPool(2)
-        features = []
-        
-        while should_run:
-            if audio_queue.empty():
-                gevent.sleep(0.01)
-                continue
-                
-            chunk = audio_queue.get()
-            features.extend(chunk)
-            
-            # Maintain sliding window with overlap
-            while len(features) >= window_size:
-                pool.apply_async(classify_audio, 
-                               args=(features[:window_size],))
-                features = features[int(window_size*(1-OVERLAP)):]
-                
-    except Exception as e:
-        print(f"Audio processing error: {str(e)}")
-
-def classify_audio(data):
-    """Edge Impulse classification in threadpool"""
-    try:
-        res = runner.classify(np.array(data))
-        classification_queue.put(res)
-    except Exception as e:
-        print(f"Classification error: {str(e)}")
+# Replace process_audio with official generator pattern
+def audio_classification_loop():
+    with runner.classifier(device_id=device_id) as classifier:  # ← Official method
+        for res, audio in classifier:
+            if not should_run:
+                break
+            result_queue.put(res)
+            gevent.sleep(0)  # ← Explicit yield
 
 def emit_video_frames():
     """Video processing pipeline"""
@@ -132,8 +80,8 @@ def emit_video_frames():
                     break
                     
                 # Skip frames if queue is getting full
-                if video_frames_queue.qsize() > 30:
-                    gevent.sleep(0.1)
+                if video_frames_queue.qsize() > 5:
+                    gevent.sleep(0.2)
                     continue
                     
                 processed_frame = fall_system.process_frame(frame)
@@ -162,14 +110,8 @@ def emit_data():
         if not audio_queue.empty():
             socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
         
-        if not classification_queue.empty():
-            res = classification_queue.get_nowait()
-            result = {
-                'label': max(res['result']['classification'], 
-                            key=res['result']['classification'].get),
-                'scores': res['result']['classification']
-            }
-            socketio.emit('audio_classification', result)
+        if not result_queue.empty():
+            socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
 
         gevent.sleep(0.001)
 
@@ -223,8 +165,7 @@ if __name__ == '__main__':
 
         gevent.spawn(emit_data)
         gevent.spawn(emit_video_frames)
-        gevent.spawn(audio_capture)
-        gevent.spawn(process_audio)
+        gevent.spawn(audio_classification_loop)
 
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
 
