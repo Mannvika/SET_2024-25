@@ -62,10 +62,10 @@ def classify_audio():
             # Get the latest chunk of audio from the queue
             audio_data = classification_queue.popleft()
 
-            audio_data_flattened = audio_data.flatten()
+            audio_data_mono = np.mean(audio_data, axis=1, dtype=np.int16)  # Convert stereo to mono
 
             # Add the new audio data to the buffer
-            features = np.concatenate((features, audio_data_flattened), axis=0)
+            features = np.concatenate((features, audio_data_mono), axis=0)
 
             # Check if we have enough data to classify
             while len(features) >= window_size:
@@ -143,6 +143,7 @@ if __name__ == '__main__':
         window_size = model_info['model_parameters']['input_features_count']
         sampling_rate = model_info['model_parameters']['frequency']
         print(f"Loaded model: {model_info['project']['owner']} / {model_info['project']['name']}")
+        print(f"Window Size: {window_size}, Block Size: {CHUNK_SIZE}")
         print("Model Sampling Rate: ", sampling_rate)
 
         starttime = time.time()
