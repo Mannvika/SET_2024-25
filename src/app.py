@@ -16,9 +16,11 @@ from gevent.queue import Queue
 from gevent.threadpool import ThreadPool
 import librosa
 import psutil  # For resource monitoring
+import pyaudio
 
 # Edge Impulse Audio
 from edge_impulse_linux.audio import AudioImpulseRunner
+from edge_impulse_linux.audio import Microphone
 
 app = Flask(__name__)
 CORS(app)
@@ -41,6 +43,48 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 # System State
 compressFrame = False
 should_run = True
+
+# Modified AudioImpulseRunner subclass in app.py
+class PatchedAudioImpulseRunner(AudioImpulseRunner):
+    def classifier(self, device_id=None):
+        with PatchedMicrophone(self.sampling_rate, 256,  # CHUNK_SIZE from audio.py 
+                            device_id=device_id, channels=2) as mic:  # Force 2 channels
+            generator = mic.generator()
+            features = np.array([], dtype=np.float32)
+            
+            while not self.closed:
+                for audio in generator:
+                    # Convert stereo to mono
+                    data = np.frombuffer(audio, dtype=np.int16)
+                    mono_data = data.reshape(-1, 2).mean(axis=1).astype(np.float32)
+                    
+                    # Original Edge Impulse processing logic
+                    features = np.concatenate((features, mono_data))
+                    
+                    # Maintain original window/overlap logic
+                    while len(features) >= self.window_size:
+                        res = self.classify(features[:self.window_size])
+                        features = features[int(self.window_size * OVERLAP):]
+                        yield res, audio
+
+# Modified Microphone class to handle stereo input
+class PatchedMicrophone(Microphone):
+    def __init__(self, rate, chunk_size, device_id=None, channels=2):  # Add channels
+        super().__init__(rate, chunk_size, device_id)
+        self.channels = channels  # Override parent's channels=1
+        
+    def _init_pyaudio(self):
+        # Modified from original audio.py to support stereo
+        self.p = pyaudio.PyAudio()
+        self.stream = self.p.open(
+            format=pyaudio.paInt16,
+            channels=self.channels,  # Use our channel count
+            rate=self.rate,
+            input=True,
+            frames_per_buffer=self.chunk_size,
+            input_device_index=self.device_id,
+            stream_callback=self._callback
+        )
 
 # Replace process_audio with official generator pattern
 def audio_classification_loop():
@@ -151,7 +195,7 @@ if __name__ == '__main__':
     try:
         global runner, labels, window_size
         
-        runner = AudioImpulseRunner(MODEL_PATH)
+        runner = PatchedAudioImpulseRunner(MODEL_PATH)
         model_info = runner.init()
         
         labels = model_info['model_parameters']['labels']
@@ -160,7 +204,11 @@ if __name__ == '__main__':
         print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
         print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
 
-        print(sd.query_devices())
+        p = pyaudio.PyAudio()
+        print("PyAudio Devices:")
+        for i in range(p.get_device_count()):
+            dev = p.get_device_info_by_index(i)
+            print(f"Device ID {i}: {dev['name']}, Max Input Channels: {dev['maxInputChannels']}")
         device_id = int(input("Enter Device ID: "))
 
         gevent.spawn(emit_data)
