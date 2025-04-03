@@ -16,6 +16,7 @@ from gevent.queue import Queue
 from gevent.threadpool import ThreadPool
 import librosa
 import psutil  # For resource monitoring
+import pyaudio
 
 # Edge Impulse Audio
 from edge_impulse_linux.audio import AudioImpulseRunner
@@ -160,7 +161,15 @@ if __name__ == '__main__':
         print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
         print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
 
-        print(sd.query_devices())
+        p = pyaudio.PyAudio()
+        try:
+            devices = []
+            for i in range(p.get_device_count()):
+                dev = p.get_device_info_by_index(i)
+                print(f"[{i}] {dev['name']} {dev['maxInputChannels']}")
+        finally:
+            p.terminate()        
+            
         device_id = int(input("Enter Device ID: "))
 
         gevent.spawn(emit_data)
