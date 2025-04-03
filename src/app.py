@@ -83,77 +83,97 @@ def classify_audio():
     """Async classification using thread pool"""
     pool = ThreadPool(1)
     features = np.array([], dtype=np.float32)
-
+    
+    # Wait for model initialization
     while 'window_size' not in globals() or window_size is None:
         print("Waiting for audio model initialization...")
         gevent.sleep(1)
-
+        
     print(f"Starting audio classification with window size: {window_size}")
-
+    
     while should_run:
         try:
-            while features.shape[0] < window_size:
-                chunk = classification_queue.get(timeout=1)
-                features = np.concatenate((features, chunk.flatten()))
-
-            window = features[:window_size]
-            if np.isnan(window).any() or np.isinf(window).any():
-                print("Invalid audio data detected, resetting buffer")
-                features = np.array([], dtype=np.float32)
+            # Non-blocking queue check
+            if classification_queue.empty():
+                gevent.sleep(0.1)  # Sleep briefly when no data
                 continue
-
-            future = pool.spawn(runner.classify, window.tolist())
-            features = features[int(window_size * (1 - OVERLAP)):]
-
-            def callback(f):
-                try:
-                    result_queue.put(f.get())
-                except Exception as e:
-                    print(f"Classification error details: {str(e)}")
-
-            future.link(callback)
-            gevent.sleep(0.01)
-
+                
+            # Get data with shorter timeout
+            try:
+                chunk = classification_queue.get(timeout=0.2)
+                features = np.concatenate((features, chunk.flatten()))
+            except gevent.queue.Empty:
+                continue
+                
+            # Process only when we have enough data
+            if features.shape[0] >= window_size:
+                window = features[:window_size]
+                if np.isnan(window).any() or np.isinf(window).any():
+                    print("Invalid audio data detected, resetting buffer")
+                    features = np.array([], dtype=np.float32)
+                    continue
+                    
+                future = pool.spawn(runner.classify, window.tolist())
+                features = features[int(window_size * (1 - OVERLAP)):]
+                
+                def callback(f):
+                    try:
+                        result_queue.put(f.get())
+                    except Exception as e:
+                        print(f"Classification error details: {str(e)}")
+                        
+                future.link(callback)
+            
+            # Critical: Give other operations processing time
+            gevent.sleep(0.02)
+                
         except Exception as e:
             print(f"Classification pipeline error: {str(e)}")
-            traceback_info = traceback.format_exc()
-            print(f"Traceback: {traceback_info}")
-            features = np.array([], dtype=np.float32)  # Reset on error
-            gevent.sleep(1)
-
+            features = np.array([], dtype=np.float32)
+            gevent.sleep(0.5)  # Longer sleep on error
 
 def emit_video_frames():
     """Video processing pipeline"""
     model_path = 'yolo11x-pose.pt'
     fall_system = FallDetectionSystem(model_path)
+    
+    # Reduce frame resolution to lower processing load
+    frame_width = 320
+    frame_height = 240
+    frame_rate = 15  # Reduced from 30 fps
 
-    while should_run:  # Outer loop for reconnection
+    while should_run:
         try:
             vc = cv2.VideoCapture(0)
             if not vc.isOpened():
                 print("Could not open video stream, retrying in 3 seconds...")
                 gevent.sleep(3)
                 continue
+                
+            # Set camera properties to reduce load
+            vc.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+            vc.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+            vc.set(cv2.CAP_PROP_FPS, frame_rate)
 
             while should_run:
                 rval, frame = vc.read()
                 if not rval:
                     break
-
-                if compressFrame:
-                    frame = cv2.resize(frame, (320, 240), interpolation=cv2.INTER_AREA)
-
-                processed_frame = fall_system.process_frame(frame)
-                _, encoded_image = cv2.imencode(".jpg", processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 50])
-                video_frames_queue.put(encoded_image.tobytes())
-                
-                # Check if queue is getting full and add frame skipping
-                if video_frames_queue.qsize() > 40:
+                    
+                # Skip frames if queue is getting full
+                if video_frames_queue.qsize() > 30:
                     gevent.sleep(0.1)
                     continue
+                    
+                processed_frame = fall_system.process_frame(frame)
                 
-                gevent.sleep(1 / 30)  # ~30 FPS
-
+                # Use software encoding, not hardware encoding
+                _, encoded_image = cv2.imencode(".jpg", processed_frame, 
+                                              [cv2.IMWRITE_JPEG_QUALITY, 40])
+                                              
+                video_frames_queue.put(encoded_image.tobytes())
+                gevent.sleep(1 / frame_rate)
+                
         except Exception as e:
             print(f"Video capture error: {str(e)}")
         finally:
@@ -161,7 +181,6 @@ def emit_video_frames():
                 vc.release()
             print("Video device released, will attempt reconnection")
             gevent.sleep(2)
-
 
 def emit_data():
     """Unified data emitter with error handling"""
@@ -228,9 +247,28 @@ def graceful_shutdown():
     
     print("Shutdown complete.")
 
+def reduce_system_load():
+    """Configure system for stability"""
+    # Set CPU governor to ondemand for better responsiveness
+    try:
+        with open('/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor', 'w') as f:
+            f.write('ondemand')
+        print("Set CPU governor to ondemand")
+    except:
+        print("Unable to set CPU governor")
+    
+    # Reduce USB autosuspend timeout
+    try:
+        with open('/sys/module/usbcore/parameters/autosuspend', 'w') as f:
+            f.write('-1')  # Disable USB autosuspend
+        print("Disabled USB autosuspend")
+    except:
+        print("Unable to configure USB parameters")
+
 
 if __name__ == '__main__':
     try:
+        reduce_system_load()
         global runner, labels, window_size
         
         runner = AudioImpulseRunner(MODEL_PATH)
