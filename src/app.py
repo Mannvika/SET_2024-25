@@ -43,94 +43,65 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 compressFrame = False
 should_run = True
 
-
-def audio_callback(indata, frames, time, status):
-    """Audio capture callback with resampling"""
-    if status:
-        print("Audio error:", status)
+# Add these new functions to handle audio processing
+def audio_capture():
+    """Continuous audio capture using sounddevice"""
     try:
-        mono_audio = np.mean(indata, axis=1).astype(np.float32)  # Stereo to mono conversion
-        resampled = librosa.resample(
-            mono_audio.T,
-            orig_sr=CAPTURE_SAMPLE_RATE,
-            target_sr=MODEL_SAMPLE_RATE,
-        ).reshape(-1, 1)
-        classification_queue.put_nowait(resampled)
-        audio_queue.put_nowait(mono_audio)
-    except Exception as e:
-        print(f"Audio processing error: {str(e)}")
-
-
-def capture_audio():
-    """Non-blocking audio capture greenlet"""
-    try:
-        with sd.InputStream(
-            callback=audio_callback,
-            channels=2,
-            samplerate=CAPTURE_SAMPLE_RATE,
-            dtype='float32',
-            blocksize=CHUNK_SIZE,
-            device=device_id,
-        ):
-            print("Audio capture running...")
+        with sd.InputStream(samplerate=CAPTURE_SAMPLE_RATE, 
+                          channels=2,
+                          device=device_id,
+                          blocksize=CHUNK_SIZE,
+                          callback=audio_callback):
             while should_run:
                 gevent.sleep(0.1)
     except Exception as e:
-        print(f"Error initializing audio stream: {str(e)}")
+        print(f"Audio capture failed: {str(e)}")
 
-
-def classify_audio():
-    """Async classification using thread pool"""
-    pool = ThreadPool(1)
-    features = np.array([], dtype=np.float32)
+# Modified audio callback for stereo conversion
+def audio_callback(indata, frames, time, status):
+    if status:
+        print(f"Audio status: {status}")
     
-    # Wait for model initialization
-    while 'window_size' not in globals() or window_size is None:
-        print("Waiting for audio model initialization...")
-        gevent.sleep(1)
+    # Convert stereo to mono by averaging channels
+    mono_data = np.mean(indata, axis=1)
+    
+    # Resample to model's sample rate
+    chunk = librosa.resample(mono_data,
+                           orig_sr=CAPTURE_SAMPLE_RATE,
+                           target_sr=MODEL_SAMPLE_RATE)
+    
+    audio_queue.put(chunk.astype(np.float32))
+
+def process_audio():
+    """Audio classification worker using Edge Impulse"""
+    try:
+        pool = ThreadPool(2)
+        features = []
         
-    print(f"Starting audio classification with window size: {window_size}")
-    
-    while should_run:
-        try:
-            # Non-blocking queue check
-            if classification_queue.empty():
-                gevent.sleep(0.1)  # Sleep briefly when no data
+        while should_run:
+            if audio_queue.empty():
+                gevent.sleep(0.01)
                 continue
                 
-            # Get data with shorter timeout
-            try:
-                chunk = classification_queue.get(timeout=0.2)
-                features = np.concatenate((features, chunk.flatten()))
-            except gevent.queue.Empty:
-                continue
-                
-            # Process only when we have enough data
-            if features.shape[0] >= window_size:
-                window = features[:window_size]
-                if np.isnan(window).any() or np.isinf(window).any():
-                    print("Invalid audio data detected, resetting buffer")
-                    features = np.array([], dtype=np.float32)
-                    continue
-                    
-                future = pool.spawn(runner.classify, window.tolist())
-                features = features[int(window_size * (1 - OVERLAP)):]
-                
-                def callback(f):
-                    try:
-                        result_queue.put(f.get())
-                    except Exception as e:
-                        print(f"Classification error details: {str(e)}")
-                        
-                future.link(callback)
+            chunk = audio_queue.get()
+            features.extend(chunk)
             
-            # Critical: Give other operations processing time
-            gevent.sleep(0.02)
+            # Maintain sliding window with overlap
+            while len(features) >= window_size:
+                pool.apply_async(classify_audio, 
+                               args=(features[:window_size],))
+                features = features[int(window_size*(1-OVERLAP)):]
                 
-        except Exception as e:
-            print(f"Classification pipeline error: {str(e)}")
-            features = np.array([], dtype=np.float32)
-            gevent.sleep(0.5)  # Longer sleep on error
+    except Exception as e:
+        print(f"Audio processing error: {str(e)}")
+
+def classify_audio(data):
+    """Edge Impulse classification in threadpool"""
+    try:
+        res = runner.classify(np.array(data))
+        classification_queue.put(res)
+    except Exception as e:
+        print(f"Classification error: {str(e)}")
 
 def emit_video_frames():
     """Video processing pipeline"""
@@ -184,42 +155,29 @@ def emit_video_frames():
 
 def emit_data():
     """Unified data emitter with error handling"""
-    while should_run:
-        try:
-            if not video_frames_queue.empty():
-                socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
-            
-            if not audio_queue.empty():
-                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
-            
-            if not result_queue.empty():
-                res = result_queue.get_nowait()
-                socketio.emit('audio_classification', {'result': res['result']['classification']})
-
-            gevent.sleep(0.001)
-
-        except BrokenPipeError:
-            print("Client disconnected - resetting queues")
+    try:
+        if not video_frames_queue.empty():
+            socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
         
-        except Exception as e:
-            print(f"Emit error: {str(e)}")
-
-
-def monitor_resources():
-    """Monitor system resources and adjust processing if needed"""
-    global compressFrame
-
-    while should_run:
-        cpu_percent = psutil.cpu_percent(interval=1)
-        mem_percent = psutil.virtual_memory().percent
-
-        if cpu_percent > 85 or mem_percent > 80:
-            compressFrame = True
-            print(f"High resource usage detected (CPU: {cpu_percent}%, MEM: {mem_percent}%). Enabling compression.")
-        else:
-            compressFrame = False
+        if not audio_queue.empty():
+            socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
         
-        gevent.sleep(5)
+        if not classification_queue.empty():
+            res = classification_queue.get_nowait()
+            result = {
+                'label': max(res['result']['classification'], 
+                            key=res['result']['classification'].get),
+                'scores': res['result']['classification']
+            }
+            socketio.emit('audio_classification', result)
+
+        gevent.sleep(0.001)
+
+    except BrokenPipeError:
+        print("Client disconnected - resetting queues")
+    
+    except Exception as e:
+        print(f"Emit error: {str(e)}")
 
 
 def graceful_shutdown():
@@ -247,28 +205,8 @@ def graceful_shutdown():
     
     print("Shutdown complete.")
 
-def reduce_system_load():
-    """Configure system for stability"""
-    # Set CPU governor to ondemand for better responsiveness
-    try:
-        with open('/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor', 'w') as f:
-            f.write('ondemand')
-        print("Set CPU governor to ondemand")
-    except:
-        print("Unable to set CPU governor")
-    
-    # Reduce USB autosuspend timeout
-    try:
-        with open('/sys/module/usbcore/parameters/autosuspend', 'w') as f:
-            f.write('-1')  # Disable USB autosuspend
-        print("Disabled USB autosuspend")
-    except:
-        print("Unable to configure USB parameters")
-
-
 if __name__ == '__main__':
     try:
-        reduce_system_load()
         global runner, labels, window_size
         
         runner = AudioImpulseRunner(MODEL_PATH)
@@ -283,11 +221,10 @@ if __name__ == '__main__':
         print(sd.query_devices())
         device_id = int(input("Enter Device ID: "))
 
-        gevent.spawn(monitor_resources)
         gevent.spawn(emit_data)
         gevent.spawn(emit_video_frames)
-        gevent.spawn(capture_audio)
-        gevent.spawn(classify_audio)
+        gevent.spawn(audio_capture)
+        gevent.spawn(process_audio)
 
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
 
