@@ -13,7 +13,9 @@ from fall_detection_system import FallDetectionSystem
 import time
 import traceback
 from gevent.queue import Queue
-import pyaudio
+from gevent.threadpool import ThreadPool
+import librosa
+import psutil  # For resource monitoring
 
 # Edge Impulse Audio
 from edge_impulse_linux.audio import AudioImpulseRunner
@@ -24,58 +26,50 @@ socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 
 # Buffers
 video_frames_queue = Queue(maxsize=10)
+audio_queue = Queue(maxsize=5)
 result_queue = Queue(maxsize=10)
 
-# Audio Configuration
-MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
-CHUNK_SIZE = 1024
+# Audio Config
+MODEL_SAMPLE_RATE = 16000
+CAPTURE_SAMPLE_RATE = 44100
+CHUNK_SIZE = int(MODEL_SAMPLE_RATE * 0.1)  # 100ms chunks for 16kHz
 OVERLAP = 0.25
+
+device_id = 0  # Set device ID dynamically at runtime
+MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 
 # System State
 compressFrame = False
 should_run = True
 
-# --- Audio Classification Thread ---
-def audio_classification_thread(device_id):
-    """Main loop for audio classification"""
-    try:
-        with AudioImpulseRunner(MODEL_PATH) as runner:
-            model_info = runner.init()
-            print(f"Audio model: {model_info['project']['owner']}/{model_info['project']['name']}")
-            
-            for res, audio in runner.classifier(device_id=device_id):
-                if not should_run:
-                    break
-                
-                # Put result in queue for emission
-                result_queue.put_nowait({
-                    'result': res['result']['classification'],
-                    'timing': res['timing']
-                })
-                
-    except Exception as e:
-        print(f"Audio classification error: {str(e)}")
-        traceback.print_exc()
-    finally:
-        print("Audio classification stopped")
+# Replace process_audio with official generator pattern
+def audio_classification_loop():
+    with runner.classifier(device_id=device_id) as classifier:  # ← Official method
+        for res, audio in classifier:
+            if not should_run:
+                break
+            result_queue.put(res)
+            gevent.sleep(0)  # ← Explicit yield
 
 def emit_video_frames():
     """Video processing pipeline"""
     model_path = 'yolo11x-pose.pt'
     fall_system = FallDetectionSystem(model_path)
     
+    # Reduce frame resolution to lower processing load
     frame_width = 320
     frame_height = 240
-    frame_rate = 15
+    frame_rate = 15  # Reduced from 30 fps
 
     while should_run:
         try:
             vc = cv2.VideoCapture(0)
             if not vc.isOpened():
-                print("Could not open video stream, retrying...")
+                print("Could not open video stream, retrying in 3 seconds...")
                 gevent.sleep(3)
                 continue
                 
+            # Set camera properties to reduce load
             vc.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
             vc.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
             vc.set(cv2.CAP_PROP_FPS, frame_rate)
@@ -85,87 +79,95 @@ def emit_video_frames():
                 if not rval:
                     break
                     
+                # Skip frames if queue is getting full
                 if video_frames_queue.qsize() > 5:
                     gevent.sleep(0.2)
                     continue
                     
                 processed_frame = fall_system.process_frame(frame)
+                
+                # Use software encoding, not hardware encoding
                 _, encoded_image = cv2.imencode(".jpg", processed_frame, 
                                               [cv2.IMWRITE_JPEG_QUALITY, 40])
+                                              
                 video_frames_queue.put(encoded_image.tobytes())
                 gevent.sleep(1 / frame_rate)
                 
         except Exception as e:
-            print(f"Video error: {str(e)}")
-            traceback.print_exc()
+            print(f"Video capture error: {str(e)}")
         finally:
-            if 'vc' in locals():
+            if 'vc' in locals() and vc is not None:
                 vc.release()
-            print("Video device released")
+            print("Video device released, will attempt reconnection")
             gevent.sleep(2)
 
 def emit_data():
-    """Data emitter with enhanced error handling"""
-    while should_run:
-        try:
-            if not video_frames_queue.empty():
-                socketio.emit('video_frame', {
-                    'frame': video_frames_queue.get_nowait()
-                })
-            
-            if not result_queue.empty():
-                res = result_queue.get_nowait()
-                socketio.emit('audio_classification', {
-                    'result': res['result']['classification']
-                })
+    """Unified data emitter with error handling"""
+    try:
+        if not video_frames_queue.empty():
+            socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
+        
+        if not audio_queue.empty():
+            socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
+        
+        if not result_queue.empty():
+            socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
 
-            gevent.sleep(0.001)
-        except Exception as e:
-            print(f"Emit error: {str(e)}")
-            traceback.print_exc()
+        gevent.sleep(0.001)
+
+    except BrokenPipeError:
+        print("Client disconnected - resetting queues")
+    
+    except Exception as e:
+        print(f"Emit error: {str(e)}")
+
 
 def graceful_shutdown():
+    """Properly handle cleanup of all resources"""
+    print("\nGraceful shutdown...")
+    
+    # Stop all processing first
     global should_run
     should_run = False
-    gevent.sleep(1)
+    gevent.sleep(0.5)
     
-    if 'runner' in globals():
+    # Close resources
+    if 'runner' in globals() and runner is not None:
         try:
             runner.stop()
         except Exception as e:
-            print(f"Runner stop error: {str(e)}")
+            print(f"Error stopping runner: {str(e)}")
     
+    # Find and kill all active greenlets
     try:
         greenlets = [g for g in gevent.get_hub().threadpool if not g.dead]
-        gevent.killall(greenlets, timeout=5)
+        gevent.killall(greenlets, timeout=3)
     except Exception as e:
-        print(f"Greenlet kill error: {str(e)}")
+        print(f"Error killing greenlets: {str(e)}")
     
-    print("Shutdown complete")
+    print("Shutdown complete.")
 
 if __name__ == '__main__':
     try:
-        # Audio Device Selection
-        p = pyaudio.PyAudio()
-        print("\nAvailable PyAudio devices:")
-        for i in range(p.get_device_count()):
-            dev = p.get_device_info_by_index(i)
-            if dev['maxInputChannels'] > 0:
-                print(f"{i}: {dev['name']} (Channels: {dev['maxInputChannels']}, SR: {dev['defaultSampleRate']}Hz)")
-        device_id = int(input("Enter valid audio device ID: "))
-        p.terminate()
+        global runner, labels, window_size
+        
+        runner = AudioImpulseRunner(MODEL_PATH)
+        model_info = runner.init()
+        
+        labels = model_info['model_parameters']['labels']
+        window_size = model_info['model_parameters']['input_features_count']
 
-        # Start services
-        gevent.spawn(emit_video_frames)
+        print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
+        print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
+
+        print(sd.query_devices())
+        device_id = int(input("Enter Device ID: "))
+
         gevent.spawn(emit_data)
-        gevent.spawn(audio_classification_thread, device_id)  # Add audio thread
+        gevent.spawn(emit_video_frames)
+        gevent.spawn(audio_classification_loop)
 
-        # Start server
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
 
     except KeyboardInterrupt:
-        graceful_shutdown()
-    except Exception as e:
-        print(f"Main error: {str(e)}")
-        traceback.print_exc()
         graceful_shutdown()
