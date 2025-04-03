@@ -17,7 +17,6 @@ import pyaudio
 
 # Edge Impulse Audio
 from edge_impulse_linux.audio import AudioImpulseRunner
-from edge_impulse_linux.audio import Microphone
 
 app = Flask(__name__)
 CORS(app)
@@ -27,113 +26,38 @@ socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 video_frames_queue = Queue(maxsize=10)
 result_queue = Queue(maxsize=10)
 
-# Audio Config
-MODEL_SAMPLE_RATE = 16000
-CAPTURE_SAMPLE_RATE = 44100
-CHUNK_SIZE = int(MODEL_SAMPLE_RATE * 0.1)
-OVERLAP = 0.25
-
-device_id = 0
+# Audio Configuration
 MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
+CHUNK_SIZE = 1024
+OVERLAP = 0.25
 
 # System State
 compressFrame = False
 should_run = True
 
-class PatchedMicrophone(Microphone):
-    def __init__(self, rate, chunk_size, device_id=None, channels=2):
-        self.actual_sample_rate = None
-        super().__init__(rate, chunk_size, device_id)
-        self.channels = channels
-        self.resample_required = False
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.stop()
-
-    def _init_pyaudio(self):
-        self.p = pyaudio.PyAudio()
-        
-        # Get device info
-        dev_info = self.p.get_device_info_by_index(self.device_id)
-        self.actual_sample_rate = int(dev_info['defaultSampleRate'])
-        self.resample_required = (self.actual_sample_rate != MODEL_SAMPLE_RATE)
-        
-        print(f"Device sample rate: {self.actual_sample_rate}Hz, Model requires: {MODEL_SAMPLE_RATE}Hz")
-        
-        # Force format check
-        try:
-            is_supported = self.p.is_format_supported(
-                rate=MODEL_SAMPLE_RATE,
-                input_device=self.device_id,
-                input_channels=1,
-                input_format=pyaudio.paInt16
-            )
-            print(f"Format supported: {is_supported}")
-        except Exception as e:
-            print(f"Compatibility check failed: {str(e)}")
-            raise
-
-        self.stream = self.p.open(
-            format=pyaudio.paInt16,
-            channels=self.channels,
-            rate=self.actual_sample_rate if self.resample_required else MODEL_SAMPLE_RATE,
-            input=True,
-            frames_per_buffer=self.chunk_size,
-            input_device_index=self.device_id,
-            stream_callback=self._callback
-        )
-
-    def generator(self):
-        for raw_audio in super().generator():
-            if self.resample_required:
-                # Convert to numpy array and resample
-                data = np.frombuffer(raw_audio, dtype=np.int16)
-                data = librosa.resample(
-                    data.astype(np.float32),
-                    orig_sr=self.actual_sample_rate,
-                    target_sr=MODEL_SAMPLE_RATE
-                ).astype(np.int16).tobytes()
-            yield data
-
-class PatchedAudioImpulseRunner(AudioImpulseRunner):
-    def classifier(self, device_id=None):
-        return PatchedMicrophone(
-            rate=MODEL_SAMPLE_RATE,
-            chunk_size=256,
-            device_id=device_id,
-            channels=2
-        )
-
-def audio_classification_loop():
+# --- Audio Classification Thread ---
+def audio_classification_thread(device_id):
+    """Main loop for audio classification"""
     try:
-        with runner.classifier(device_id=device_id) as mic:
-            generator = mic.generator()
-            features = np.array([], dtype=np.float32)
-
-            while should_run:
-                for audio in generator:
-                    # Convert stereo to mono
-                    data = np.frombuffer(audio, dtype=np.int16)
-                    mono_data = data.reshape(-1, 2).mean(axis=1).astype(np.float32)
-
-                    features = np.concatenate((features, mono_data))
-
-                    while len(features) >= runner.window_size:
-                        try:
-                            res = runner.classify(features[:runner.window_size])
-                            result_queue.put(res)
-                        except Exception as e:
-                            print(f"Classification error: {str(e)}")
-                            traceback.print_exc()
-
-                        features = features[int(runner.window_size * OVERLAP):]
-                        gevent.sleep(0)
+        with AudioImpulseRunner(MODEL_PATH) as runner:
+            model_info = runner.init()
+            print(f"Audio model: {model_info['project']['owner']}/{model_info['project']['name']}")
+            
+            for res, audio in runner.classifier(device_id=device_id):
+                if not should_run:
+                    break
+                
+                # Put result in queue for emission
+                result_queue.put_nowait({
+                    'result': res['result']['classification'],
+                    'timing': res['timing']
+                })
+                
     except Exception as e:
-        print(f"Audio loop failed: {str(e)}")
+        print(f"Audio classification error: {str(e)}")
         traceback.print_exc()
+    finally:
+        print("Audio classification stopped")
 
 def emit_video_frames():
     """Video processing pipeline"""
@@ -221,41 +145,22 @@ def graceful_shutdown():
 
 if __name__ == '__main__':
     try:
-        global runner
-
-        runner = PatchedAudioImpulseRunner(MODEL_PATH)
-        model_info = runner.init()
-
-        print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
-        print(f"Window size: {model_info['model_parameters']['input_features_count']} samples")
-
+        # Audio Device Selection
         p = pyaudio.PyAudio()
         print("\nAvailable PyAudio devices:")
-        valid_devices = []
-        
         for i in range(p.get_device_count()):
             dev = p.get_device_info_by_index(i)
-            channels = dev['maxInputChannels']
-            rate = int(dev['defaultSampleRate'])
-            
-            print(f"{i}: {dev['name']}")
-            print(f"   Channels: {channels}, Sample Rate: {rate}Hz")
-            
-            if channels >= 1 and (rate == MODEL_SAMPLE_RATE or rate >= 16000):
-                valid_devices.append(i)
-                print("   → VALID DEVICE")
+            if dev['maxInputChannels'] > 0:
+                print(f"{i}: {dev['name']} (Channels: {dev['maxInputChannels']}, SR: {dev['defaultSampleRate']}Hz)")
+        device_id = int(input("Enter valid audio device ID: "))
+        p.terminate()
 
-        if not valid_devices:
-            raise Exception("No compatible audio devices found!")
-
-        device_id = int(input(f"\nEnter VALID PyAudio device ID ({valid_devices}): "))
-        if device_id not in valid_devices:
-            raise ValueError("Invalid device selected")
-
-        gevent.spawn(audio_classification_loop)
+        # Start services
         gevent.spawn(emit_video_frames)
         gevent.spawn(emit_data)
+        gevent.spawn(audio_classification_thread, device_id)  # Add audio thread
 
+        # Start server
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
 
     except KeyboardInterrupt:
