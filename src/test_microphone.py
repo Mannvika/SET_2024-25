@@ -13,7 +13,7 @@ def list_audio_devices():
             print(f"ID: {i}, Name: {device_info['name']}")
     p.terminate()
 
-def record_audio(device_id, output_filename="output.wav", record_seconds=5, channels=1, rate=44100, frames_per_buffer=1024):
+def record_audio(device_id, output_filename="output.wav", record_seconds=5, channels=1, rate=44100, frames_per_buffer=4096):
     """Record audio from the specified device ID."""
     p = pyaudio.PyAudio()
 
@@ -28,8 +28,11 @@ def record_audio(device_id, output_filename="output.wav", record_seconds=5, chan
     frames = []
 
     for i in range(0, int(rate / frames_per_buffer * record_seconds)):
-        data = stream.read(frames_per_buffer)
-        frames.append(data)
+        try:
+            data = stream.read(frames_per_buffer)
+            frames.append(data)
+        except IOError as e:
+            print(f"Error recording: {e}")
 
     print("Finished recording")
 
