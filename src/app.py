@@ -185,8 +185,8 @@ if __name__ == '__main__':
             
         device_id = int(input("Enter Device ID: "))
 
-        gevent.spawn(emit_data)
-        gevent.spawn(emit_video_frames)
+        #gevent.spawn(emit_data)
+        #gevent.spawn(emit_video_frames)
         gevent.spawn(audio_classification_loop)
 
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
