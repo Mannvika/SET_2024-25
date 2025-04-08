@@ -7,7 +7,10 @@ function App() {
     const [imageSrc, setImageSrc] = useState(null);
 
     useEffect(() => {
-        const socket = io('http://localhost:8000');
+        const socket = io("192.168.113.26:8000", {
+            transports: ["websocket"],
+            upgrade: false
+        });
 
         console.log('Attempting to connect to the socket server...');
 
