@@ -9,6 +9,8 @@ import sounddevice as sd
 import time
 #from AudioClassifier import AudioClassifier  # Your scream detection class
 from fall_detection_system import FallDetectionSystem  # Your fall detection class
+from flask import request
+import serial
 
 # Discord Webhook for Notifications
 '''
@@ -106,7 +108,6 @@ def emit_data(video_queue, audio_queue):
 
         if not audio_queue.empty():
             audio_data = audio_queue.get_nowait()
-            print("No Audio_data")
 
         if frame is not None and audio_data is not None:
             try:
@@ -117,6 +118,26 @@ def emit_data(video_queue, audio_queue):
         else:
             pass
         time.sleep(1 / 30)  # Match video FPS
+
+
+@app.route('/arduino-command', methods=['POST'])
+def send_command_to_arduino():
+    data = request.get_json()
+    command = data.get('command')
+    print(command)
+    time.sleep(2)
+    arduino.write(command.encode())
+    print(f"Sent: {command.strip()}")
+    time.sleep(1)
+
+    if not command:
+        return {"error": "No command provided"}, 400
+
+    try:
+        # Send the command to Arduino (ensure it is a string and encoded properly)
+        return {"status": "Command sent"}, 200
+    except Exception as e:
+        return {"error": str(e)}, 500
 
 def graceful_exit(sig, frame):
     """Handles Ctrl + C and stops all processes."""
@@ -145,4 +166,5 @@ if __name__ == '__main__':
         p.start()
 
     # Run Flask-SocketIO in the main thread
+    arduino = serial.Serial('/dev/ttyUSB0', 9600, timeout=1)
     socketio.run(app, host="0.0.0.0", port=8000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)

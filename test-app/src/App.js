@@ -45,6 +45,34 @@ function App() {
         };
     }, []);
 
+    async function sendArduinoCommand() {
+        try {
+          // Make a POST request to the backend endpoint with a JSON payload
+          const command = "hello";
+          const response = await fetch('http://localhost:8000/arduino-command', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'  // Inform the server that we are sending JSON
+            },
+            body: JSON.stringify({ command })     // Convert the command into a JSON string
+          });
+      
+          // Convert the response into JSON
+          const data = await response.json();
+      
+          // Check if the response indicates success
+          if (response.ok) {
+            console.log('Command sent successfully:', data);
+          } else {
+            // If there's an error response from the server, log the error message
+            console.error('Error sending command:', data.error);
+          }
+        } catch (error) {
+          // Catch and log any network-level errors
+          console.error('Network error:', error);
+        }
+      }
+
     const playTestTone = () => {
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -62,6 +90,7 @@ function App() {
         <div>
             <h1>Real-Time Video Stream</h1>
             {imageSrc && <img src={imageSrc} alt="Video Stream" style={{ width: "600px" }} />}
+            <button onClick={sendArduinoCommand}>arudino test button</button>
             <button onClick={playTestTone}>Play Test Tone</button>
         </div>
     );
