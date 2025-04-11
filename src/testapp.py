@@ -127,6 +127,7 @@ def send_command_to_arduino():
     print(command)
     time.sleep(2)
     arduino.write(command.encode())
+    print(arduino.readline())
     print(f"Sent: {command.strip()}")
     time.sleep(1)
 
@@ -135,6 +136,10 @@ def send_command_to_arduino():
 
     try:
         # Send the command to Arduino (ensure it is a string and encoded properly)
+        test_inc = 'hi'
+        arduino.write(test_inc.encode('utf-8'))
+        time.sleep(0.05)
+        print(arduino.readline())
         return {"status": "Command sent"}, 200
     except Exception as e:
         return {"error": str(e)}, 500
@@ -166,5 +171,5 @@ if __name__ == '__main__':
         p.start()
 
     # Run Flask-SocketIO in the main thread
-    arduino = serial.Serial('/dev/ttyUSB0', 9600, timeout=1)
+    arduino = serial.Serial('COM7', 115200, timeout=1)
     socketio.run(app, host="0.0.0.0", port=8000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
