@@ -58,11 +58,17 @@ def audio_classification_loop():
                 print("bello")
                 print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
                 for label in labels:
-                    score = res['result']['classification'][label]
-                    print('%s: %.2f\t' % (label, score), end='')
+                    if label == "Screaming":
+                        score = res['result']['classification'][label]
+                        print('%s: %.2f\t' % (label, score), end='')
+                        if score >= 0.70:
+                            print("SCREAMING")
+                            result_queue.put(True)
+                        else:
+                            print("NOT SCREAMING")
+                            result_queue.put(False)
                 if not should_run:
                     break
-                result_queue.put(res)
                 gevent.sleep(0)  # ← Explicit yield
             print("bello again")
         except Exception as e:
