@@ -63,7 +63,7 @@ def audio_classification_loop():
                 if not should_run:
                     break
                 result_queue.put(res)
-                # gevent.sleep(0)  # ← Explicit yield
+                gevent.sleep(0)  # ← Explicit yield
             print("bello again")
         except Exception as e:
             traceback.print_exc()
@@ -121,23 +121,24 @@ def emit_video_frames():
 
 def emit_data():
     """Unified data emitter with error handling"""
-    try:
-        if not video_frames_queue.empty():
-            socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
-        
-        if not audio_queue.empty():
-            socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
-        
-        if not result_queue.empty():
-            socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
+    while should_run:
+        try:
+            if not video_frames_queue.empty():
+                socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
+            
+            if not audio_queue.empty():
+                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
+            
+            if not result_queue.empty():
+                socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
 
-        gevent.sleep(0.001)
+            gevent.sleep(0.001)
 
-    except BrokenPipeError:
-        print("Client disconnected - resetting queues")
-    
-    except Exception as e:
-        print(f"Emit error: {str(e)}")
+        except BrokenPipeError:
+            print("Client disconnected - resetting queues")
+        
+        except Exception as e:
+            print(f"Emit error: {str(e)}")
 
 
 def graceful_shutdown():
