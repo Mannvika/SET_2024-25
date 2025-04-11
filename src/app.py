@@ -56,10 +56,14 @@ def audio_classification_loop():
             print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
             for res, audio in runner.classifier(device_id=device_id):
                 print("bello")
+                print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
+                for label in labels:
+                    score = res['result']['classification'][label]
+                    print('%s: %.2f\t' % (label, score), end='')
                 if not should_run:
                     break
                 result_queue.put(res)
-                gevent.sleep(0)  # ← Explicit yield
+                # gevent.sleep(0)  # ← Explicit yield
             print("bello again")
         except Exception as e:
             traceback.print_exc()
@@ -185,8 +189,8 @@ if __name__ == '__main__':
             
         device_id = int(input("Enter Device ID: "))
 
-        #gevent.spawn(emit_data)
-        #gevent.spawn(emit_video_frames)
+        gevent.spawn(emit_data)
+        gevent.spawn(emit_video_frames)
         gevent.spawn(audio_classification_loop)
 
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
