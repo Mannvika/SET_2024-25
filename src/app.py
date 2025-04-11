@@ -47,19 +47,30 @@ should_run = True
 def audio_classification_loop():
     with AudioImpulseRunner(MODEL_PATH) as runner:
         try:
+            # Initialize the EdgeImpulse model was runner to be used.
             model_info = runner.init()
             
+            # Get the labels Screaming and notScreaming
             labels = model_info['model_parameters']['labels']
+
+            # Get additional model parameters including audio window to intake.
             window_size = model_info['model_parameters']['input_features_count']
 
+            # Model information
             print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
             print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
             for res, audio in runner.classifier(device_id=device_id):
+                # Prints how long it took to get the classification                
                 print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
                 for label in labels:
+                    # We only care about the Screaming label
                     if label == "Screaming":
+                        # Gets how much the model thinks is screaming and prints it
                         score = res['result']['classification'][label]
                         print('%s: %.2f\t' % (label, score), end='')
+                        # We've (Sunny, Sarah, and Antonio) determined that Screaming > 0.70
+                        # is high enough confident to be consistent with a screaming sound. 
+                        # Inserts a Boolean into the result of whether a scream was detected or not. 
                         if score >= 0.70:
                             print("SCREAMING")
                             result_queue.put(True)
@@ -134,6 +145,7 @@ def emit_data():
                 socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
             
             if not result_queue.empty():
+                # This will return an queue of Booleans of whether the classification is Screaming or not. 
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
 
             gevent.sleep(0.001)
