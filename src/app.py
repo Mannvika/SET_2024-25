@@ -45,24 +45,24 @@ should_run = True
 
 # Replace process_audio with official generator pattern
 def audio_classification_loop():
-    try:
-        runner = AudioImpulseRunner(MODEL_PATH)
-        model_info = runner.init()
-        
-        labels = model_info['model_parameters']['labels']
-        window_size = model_info['model_parameters']['input_features_count']
+    with AudioImpulseRunner(MODEL_PATH) as runner:
+        try:
+            model_info = runner.init()
+            
+            labels = model_info['model_parameters']['labels']
+            window_size = model_info['model_parameters']['input_features_count']
 
-        print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
-        print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
-        for res, audio in runner.classifier(device_id=device_id):
-            print("bello")
-            if not should_run:
-                break
-            result_queue.put(res)
-            gevent.sleep(0)  # ← Explicit yield
-        print("bello again")
-    except Exception as e:
-        traceback.print_exc()
+            print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
+            print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
+            for res, audio in runner.classifier(device_id=device_id):
+                print("bello")
+                if not should_run:
+                    break
+                result_queue.put(res)
+                gevent.sleep(0)  # ← Explicit yield
+            print("bello again")
+        except Exception as e:
+            traceback.print_exc()
 
 
 def emit_video_frames():
