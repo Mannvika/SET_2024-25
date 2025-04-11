@@ -55,7 +55,6 @@ def audio_classification_loop():
             print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
             print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
             for res, audio in runner.classifier(device_id=device_id):
-                print("bello")
                 print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
                 for label in labels:
                     if label == "Screaming":
@@ -70,7 +69,6 @@ def audio_classification_loop():
                 if not should_run:
                     break
                 gevent.sleep(0)  # ← Explicit yield
-            print("bello again")
         except Exception as e:
             traceback.print_exc()
 
