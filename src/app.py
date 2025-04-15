@@ -60,6 +60,7 @@ def audio_classification_loop():
             print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
             print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
             for res, audio in runner.classifier(device_id=device_id):
+                audio_queue.put(audio)
                 # Prints how long it took to get the classification                
                 print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
                 for label in labels:
