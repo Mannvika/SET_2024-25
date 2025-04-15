@@ -61,6 +61,7 @@ def audio_classification_loop():
             print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
             for res, audio in runner.classifier(device_id=device_id):
                 audio_queue.put(audio)
+                print(type(audio))
                 # Prints how long it took to get the classification                
                 print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
                 for label in labels:
@@ -143,7 +144,7 @@ def emit_data():
                 socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
             
             if not audio_queue.empty():
-                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
+                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait()})
             
             if not result_queue.empty():
                 # This will return an queue of Booleans of whether the classification is Screaming or not. 
