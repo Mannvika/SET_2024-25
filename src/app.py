@@ -14,9 +14,11 @@ import time
 import traceback
 from gevent.queue import Queue
 from gevent.threadpool import ThreadPool
+from gevent_serial import Serial
 import librosa
 import psutil  # For resource monitoring
 import pyaudio
+import serial
 
 # Edge Impulse Audio
 from edge_impulse_linux.audio import AudioImpulseRunner
@@ -29,6 +31,7 @@ socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 video_frames_queue = Queue(maxsize=10)
 audio_queue = Queue(maxsize=5)
 result_queue = Queue(maxsize=10)
+direction_queue = Queue(maxsize=20)
 
 # Audio Config
 MODEL_SAMPLE_RATE = 16000
@@ -42,6 +45,40 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 # System State
 compressFrame = False
 should_run = True
+
+@socketio.on('movement_command')
+def handle_direction(data):
+    command_map = {
+        'forward': 'F', 
+        'backward': 'B',
+        'left': 'L',
+        'right': 'R',
+        'turn': 'T'
+    }
+    
+    if data['action'] in command_map:
+        state = 1 if data['state'] else 0
+        direction_queue.put(f"{command_map[data['action']]}:{state}")
+
+def arduino_writer():
+    arduino = Serial(
+        port="/dev/ttyACM0",
+        baudrate=115200,
+        timeout=0.1,  # Non-blocking read
+        write_timeout=0.1  # Non-blocking write
+    )
+    
+    while should_run:
+        try:
+            if not direction_queue.empty():
+                cmd = direction_queue.get_nowait()
+                print(cmd)
+                arduino.write(f"{cmd}\n".encode('utf-8'))  # Yields automatically
+            gevent.sleep(0)
+        except (serial.SerialException, gevent.timeout.Timeout) as e:
+            print(f"Non-blocking error: {str(e)}")
+            gevent.sleep(0.1)
+
 
 # Replace process_audio with official generator pattern
 def audio_classification_loop():
@@ -187,7 +224,8 @@ if __name__ == '__main__':
 
         gevent.spawn(emit_data)
         gevent.spawn(emit_video_frames)
-        gevent.spawn(audio_classification_loop)
+        #gevent.spawn(audio_classification_loop)
+        gevent.spawn(arduino_writer)
 
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
 
