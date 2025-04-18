@@ -14,7 +14,6 @@ import time
 import traceback
 from gevent.queue import Queue
 from gevent.threadpool import ThreadPool
-from gevent_serial import Serial
 import librosa
 import psutil  # For resource monitoring
 import pyaudio
@@ -28,6 +27,7 @@ CORS(app)
 socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 
 # Buffers
+serial_pool = ThreadPool(1)
 video_frames_queue = Queue(maxsize=10)
 audio_queue = Queue(maxsize=5)
 result_queue = Queue(maxsize=10)
@@ -60,24 +60,41 @@ def handle_direction(data):
         state = 1 if data['state'] else 0
         direction_queue.put(f"{command_map[data['action']]}:{state}")
 
-def arduino_writer():
-    arduino = Serial(
-        port="/dev/ttyACM0",
-        baudrate=115200,
-        timeout=0.1,  # Non-blocking read
-        write_timeout=0.1  # Non-blocking write
-    )
-    
+def serial_worker():
+    """Dedicated OS thread for blocking serial operations"""
+    arduino = None
     while should_run:
         try:
-            if not direction_queue.empty():
-                cmd = direction_queue.get_nowait()
-                print(cmd)
-                arduino.write(f"{cmd}\n".encode('utf-8'))  # Yields automatically
-            gevent.sleep(0)
-        except (serial.SerialException, gevent.timeout.Timeout) as e:
-            print(f"Non-blocking error: {str(e)}")
-            gevent.sleep(0.1)
+            if not arduino:
+                arduino = serial.Serial(
+                    port='/dev/ttyACM0',
+                    baudrate=115200,
+                    timeout=0.1  # Critical for non-blocking reads
+                )
+                sleep(2)  # Allow Arduino reset
+
+            # Non-blocking write
+            if not command_queue.empty():
+                cmd = command_queue.get_nowait()
+                arduino.write(f"{cmd}\n".encode('utf-8'))
+
+            # Non-blocking read (optional)
+            while arduino.in_waiting > 0:
+                data = arduino.read_all()
+                process_serial_data(data)
+
+        except (serial.SerialException, OSError) as e:
+            print(f"Serial error: {e}")
+            if arduino:
+                arduino.close()
+                arduino = None
+            sleep(1)
+
+def arduino_writer():
+    """Gevent-compatible queue manager"""
+    while should_run:
+        # Yield control to other greenlets
+        sleep(0)
 
 
 # Replace process_audio with official generator pattern
