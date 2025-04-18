@@ -48,7 +48,7 @@ function App() {
     async function sendArduinoCommand() {
         try {
           // Make a POST request to the backend endpoint with a JSON payload
-          const command = "hello";
+          const command = "h";
           const response = await fetch('http://localhost:8000/arduino-command', {
             method: 'POST',
             headers: {

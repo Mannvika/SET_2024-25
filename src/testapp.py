@@ -122,24 +122,23 @@ def emit_data(video_queue, audio_queue):
 
 @app.route('/arduino-command', methods=['POST'])
 def send_command_to_arduino():
+    arduino = serial.Serial('COM3', 115200, timeout=1)
     data = request.get_json()
-    command = data.get('command')
+    command = chr(data.get('command'))
     print(command)
-    time.sleep(2)
-    arduino.write(command.encode())
-    print(arduino.readline())
-    print(f"Sent: {command.strip()}")
-    time.sleep(1)
+    # time.sleep(2)
+    # arduino.write(command.encode())
+    # print(arduino.readline())
+    # print(f"Sent: {command.strip()}")
+    # time.sleep(1)
 
     if not command:
         return {"error": "No command provided"}, 400
 
     try:
         # Send the command to Arduino (ensure it is a string and encoded properly)
-        test_inc = 'hi'
-        arduino.write(test_inc.encode('utf-8'))
-        time.sleep(0.05)
-        print(arduino.readline())
+        with serial.Serial('COM3', 115200, timeout=1) as arduino:
+            arduino.write(command.encode('utf-8'))
         return {"status": "Command sent"}, 200
     except Exception as e:
         return {"error": str(e)}, 500
@@ -171,5 +170,4 @@ if __name__ == '__main__':
         p.start()
 
     # Run Flask-SocketIO in the main thread
-    arduino = serial.Serial('COM7', 115200, timeout=1)
     socketio.run(app, host="0.0.0.0", port=8000, debug=True, use_reloader=False, allow_unsafe_werkzeug=True)
