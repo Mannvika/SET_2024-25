@@ -20,6 +20,8 @@ import pyaudio
 
 # Edge Impulse Audio
 from edge_impulse_linux.audio import AudioImpulseRunner
+from scipy.signal import butter, sosfiltfilt
+
 
 app = Flask(__name__)
 CORS(app)
@@ -38,6 +40,11 @@ OVERLAP = 0.25
 
 device_id = 0  # Set device ID dynamically at runtime
 MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
+
+# design a 5th‑order high‑pass @300 Hz
+hp_sos = butter(5, 300, btype='highpass', fs=MODEL_SAMPLE_RATE, output='sos')
+# design a 5th‑order low‑pass @3400 Hz
+lp_sos = butter(5, 3400, btype='lowpass',  fs=MODEL_SAMPLE_RATE, output='sos')
 
 # System State
 compressFrame = False
@@ -60,7 +67,13 @@ def audio_classification_loop():
             print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
             print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
             for res, audio in runner.classifier(device_id=device_id):
-                audio_queue.put(audio)
+                # audio: 1‑D np.array @ MODEL_SAMPLE_RATE
+                # 1) high‑pass
+                audio_hp = sosfiltfilt(hp_sos, audio)
+                # 2) low‑pass
+                audio_f  = sosfiltfilt(lp_sos, audio_hp)
+
+                audio_queue.put(audio_f)
                 # Prints how long it took to get the classification                
                 print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
                 for label in labels:
@@ -143,7 +156,7 @@ def emit_data():
                 socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
             
             if not audio_queue.empty():
-                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
+                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait()})
             
             if not result_queue.empty():
                 # This will return an queue of Booleans of whether the classification is Screaming or not. 
