@@ -122,8 +122,9 @@ def emit_data(video_queue, audio_queue):
 
 @app.route('/arduino-command', methods=['POST'])
 def send_command_to_arduino():
+    arduino = serial.Serial('COM3', 115200, timeout=1)
     data = request.get_json()
-    command = data.get('command')
+    command = chr(data.get('command'))
     print(command)
     time.sleep(2)
     arduino.write(command.encode('utf-8'))
