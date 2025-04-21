@@ -1,5 +1,5 @@
 from gevent import monkey
-monkey.patch_all(thread=False, select=False)
+monkey.patch_all()
 
 from flask import Flask
 from flask_cors import CORS
@@ -61,12 +61,14 @@ def handle_direction(data):
         direction_queue.put(f"{command_map[data['action']]}:{state}")
 
 def arduino_writer():
-    arduino = serial(
-        port="/dev/ttyACM0",
+    arduino = serial.Serial(
+        port="COM9",
         baudrate=115200,
         timeout=0.1,  # Non-blocking read
-        write_timeout=0.1  # Non-blocking write
-    )
+        write_timeout=0.1,  # Non-blocking write
+        bytesize=serial.EIGHTBITS,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE)
     
     while should_run:
         try:
@@ -74,10 +76,14 @@ def arduino_writer():
                 cmd = direction_queue.get_nowait()
                 print(cmd)
                 arduino.write(f"{cmd}\n".encode('utf-8'))  # Yields automatically
-            gevent.sleep(0)
+            gevent.sleep(0.001)
         except (serial.SerialException, gevent.timeout.Timeout) as e:
             print(f"Non-blocking error: {str(e)}")
             gevent.sleep(0.1)
+        finally:
+            if not should_run:
+                arduino.close()
+
    
 
 # Replace process_audio with official generator pattern
@@ -154,23 +160,24 @@ def emit_video_frames():
 
 def emit_data():
     """Unified data emitter with error handling"""
-    try:
-        if not video_frames_queue.empty():
-            socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
-        
-        if not audio_queue.empty():
-            socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
-        
-        if not result_queue.empty():
-            socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
+    while should_run:
+        try:
+            if not video_frames_queue.empty():
+                socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
+            
+            if not audio_queue.empty():
+                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
+            
+            if not result_queue.empty():
+                socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
 
-        gevent.sleep(0.001)
+            gevent.sleep(0.001)
 
-    except BrokenPipeError:
-        print("Client disconnected - resetting queues")
-    
-    except Exception as e:
-        print(f"Emit error: {str(e)}")
+        except BrokenPipeError:
+            print("Client disconnected - resetting queues")
+        
+        except Exception as e:
+            print(f"Emit error: {str(e)}")
 
 
 def graceful_shutdown():

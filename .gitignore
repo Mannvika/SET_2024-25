@@ -4,3 +4,4 @@ src/yolo11x-pose.pt
 /yolo11x-pose.pt
 
 */.venv
+src/__pycache__/fall_detection_system.cpython-312.pyc
