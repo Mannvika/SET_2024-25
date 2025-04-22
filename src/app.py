@@ -67,18 +67,15 @@ def audio_classification_loop():
             print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
             print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
             for res, audio in runner.classifier(device_id=device_id):
-<<<<<<< HEAD
                 # audio: 1‑D np.array @ MODEL_SAMPLE_RATE
                 # 1) high‑pass
-                audio_hp = sosfiltfilt(hp_sos, audio)
+                #audio_hp = sosfiltfilt(hp_sos, audio)
                 # 2) low‑pass
-                audio_f  = sosfiltfilt(lp_sos, audio_hp)
+                #audio_f  = sosfiltfilt(lp_sos, audio_hp)
 
-                audio_queue.put(audio_f)
-=======
+                #audio_queue.put(audio_f)
                 audio_queue.put(audio)
                 print(type(audio))
->>>>>>> parent of 2540311... removed print type of audio for debugging
                 # Prints how long it took to get the classification                
                 print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
                 for label in labels:
