@@ -1,5 +1,5 @@
 from gevent import monkey
-monkey.patch_all()
+monkey.patch_all(thread=False, select=False)
 
 from flask import Flask
 from flask_cors import CORS
@@ -88,24 +88,51 @@ def arduino_writer():
 
 # Replace process_audio with official generator pattern
 def audio_classification_loop():
-    try:
-        runner = AudioImpulseRunner(MODEL_PATH)
-        model_info = runner.init()
-        
-        labels = model_info['model_parameters']['labels']
-        window_size = model_info['model_parameters']['input_features_count']
+    with AudioImpulseRunner(MODEL_PATH) as runner:
+        try:
+            # Initialize the EdgeImpulse model was runner to be used.
+            model_info = runner.init()
+            
+            # Get the labels Screaming and notScreaming
+            labels = model_info['model_parameters']['labels']
 
-        print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
-        print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
-        for res, audio in runner.classifier(device_id=device_id):
-            print("bello")
-            if not should_run:
-                break
-            result_queue.put(res)
-            gevent.sleep(0)  # ← Explicit yield
-        print("bello again")
-    except Exception as e:
-        traceback.print_exc()
+            # Get additional model parameters including audio window to intake.
+            window_size = model_info['model_parameters']['input_features_count']
+
+            # Model information
+            print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
+            print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
+            for res, audio in runner.classifier(device_id=device_id):
+                # audio: 1‑D np.array @ MODEL_SAMPLE_RATE
+                # 1) high‑pass
+                audio_hp = sosfiltfilt(hp_sos, audio)
+                # 2) low‑pass
+                audio_f  = sosfiltfilt(lp_sos, audio_hp)
+
+                audio_queue.put(audio_f)
+                # Prints how long it took to get the classification                
+                print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
+                for label in labels:
+                    # We only care about the Screaming label
+                    if label == "Screaming":
+                        # Gets how much the model thinks is screaming and prints it
+                        score = res['result']['classification'][label]
+                        print('%s: %.2f\t' % (label, score), end='')
+                        # We've (Sunny, Sarah, and Antonio) determined that Screaming > 0.70
+                        # is high enough confident to be consistent with a screaming sound. 
+                        # Inserts a Boolean into the result of whether a scream was detected or not. 
+                        if score >= 0.70:
+                            print("SCREAMING")
+                            result_queue.put(True)
+                        else:
+                            print("NOT SCREAMING")
+                            result_queue.put(False)
+                if not should_run:
+                    break
+                gevent.sleep(0)  # ← Explicit yield
+        except Exception as e:
+            traceback.print_exc()
+
 
 
 def emit_video_frames():
@@ -166,9 +193,10 @@ def emit_data():
                 socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
             
             if not audio_queue.empty():
-                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait().tobytes()})
+                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait()})
             
             if not result_queue.empty():
+                # This will return an queue of Booleans of whether the classification is Screaming or not.
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
 
             gevent.sleep(0.001)
