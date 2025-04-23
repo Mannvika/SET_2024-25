@@ -45,6 +45,47 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 # System State
 compressFrame = False
 should_run = True
+starttime = time.time()
+
+@socketio.on('movement_command')
+def handle_direction(data):
+    command_map = {
+        'forward': 'F', 
+        'backward': 'B',
+        'left': 'L',
+        'right': 'R',
+        'turn': 'T'
+    }
+    
+    if data['action'] in command_map:
+        state = 1 if data['state'] else 0
+        direction_queue.put(f"{command_map[data['action']]}:{state}")
+
+def arduino_writer():
+    arduino = serial.Serial(
+        port="/dev/ttyACM0",
+        baudrate=115200,
+        timeout=0.1,  # Non-blocking read
+        write_timeout=0.1,  # Non-blocking write
+        bytesize=serial.EIGHTBITS,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE)
+    
+    while should_run:
+        try:
+            if not direction_queue.empty():
+                cmd = direction_queue.get_nowait()
+                print(cmd)
+                arduino.write(f"{cmd}\n".encode('utf-8'))  # Yields automatically
+            gevent.sleep(0.001)
+        except (serial.SerialException, gevent.timeout.Timeout) as e:
+            print(f"Non-blocking error: {str(e)}")
+            gevent.sleep(0.1)
+        finally:
+            if not should_run:
+                arduino.close()
+
+   
 
 @socketio.on('movement_command')
 def handle_direction(data):
@@ -137,7 +178,6 @@ def emit_video_frames():
     # Reduce frame resolution to lower processing load
     frame_width = 320
     frame_height = 240
-    frame_rate = 15  # Reduced from 30 fps
 
     while should_run:
         try:
@@ -148,12 +188,10 @@ def emit_video_frames():
                 continue
                 
             # Set camera properties to reduce load
-            vc.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
-            vc.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
-            vc.set(cv2.CAP_PROP_FPS, frame_rate)
 
             while should_run:
                 rval, frame = vc.read()
+
                 if not rval:
                     break
                     
@@ -169,7 +207,7 @@ def emit_video_frames():
                                               [cv2.IMWRITE_JPEG_QUALITY, 40])
                                               
                 video_frames_queue.put(encoded_image.tobytes())
-                gevent.sleep(1 / frame_rate)
+                gevent.sleep(0.000000000001)
                 
         except Exception as e:
             print(f"Video capture error: {str(e)}")
@@ -183,17 +221,16 @@ def emit_data():
     """Unified data emitter with error handling"""
     while should_run:
         try:
-            if not video_frames_queue.empty():
+            if not video_frames_queue.empty() and (time.time() - starttime > 30):
                 socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
-            
+                
             if not audio_queue.empty():
                 socketio.emit('audio_data', {'chunk': audio_queue.get_nowait()})
-            
+                
             if not result_queue.empty():
-                # This will return an queue of Booleans of whether the classification is Screaming or not.
+                #This will return an queue of Booleans of whether the classification is Screaming or not.
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
-
-            gevent.sleep(0.001)
+                time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
 
         except BrokenPipeError:
             print("Client disconnected - resetting queues")
@@ -256,6 +293,7 @@ if __name__ == '__main__':
         gevent.spawn(audio_classification_loop)
         gevent.spawn(arduino_writer)
 
+        starttime = time.time()
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
 
     except KeyboardInterrupt:
