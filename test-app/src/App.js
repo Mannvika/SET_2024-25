@@ -3,7 +3,7 @@ import io from 'socket.io-client';
 import './App.css';
 import DirectionButtons from './DirectionButtons';
 
-const flaskServerUrl = "http://127.0.0.1:8000";
+const flaskServerUrl = "http://192.168.34.26:8000";
 const FRAME_DURATION = 0.1; // seconds per audio chunk (100ms)
 const SAMPLE_RATE = 16000; // fixed sample rate for playback
 const FRAME_BYTES = SAMPLE_RATE * FRAME_DURATION * Float32Array.BYTES_PER_ELEMENT; // 1600 samples * 4 bytes = 6400 bytes
@@ -27,6 +27,7 @@ function App() {
     const audioContextRef = useRef(null);
     const nextPlayTimeRef = useRef(0);
     const pending = useRef(new Uint8Array(0));
+    const [socketReady, setSocketReady] = useState(false);
 
     const playAudioChunk = (chunk) => {
         if (!chunk) return;
@@ -62,13 +63,14 @@ function App() {
         socket.binaryType = 'arraybuffer';
         socketRef.current = socket;
 
-        socket.on("connect", () => console.log("Connected to Flask WebSocket"));
+        socket.on("connect", () => { console.log("Connected to Flask WebSocket"); setSocketReady(true)});
 
         socket.on("log", ({ message: data }) => {
             console.log("Received log:", data);
             setLogs(prev => [...prev, data]);
         });
 
+        /*
         socket.on('audio_data', (data) => {
             const incoming = new Uint8Array(data.chunk);
             const byteCount = incoming.byteLength;
@@ -88,7 +90,7 @@ function App() {
             }
 
             pending.current = combined.slice(offset);
-        });
+        });*/
 
         socket.on("video_frame", (data) => {
             const imageBlob = new Blob([new Uint8Array(data.frame)], { type: "image/jpeg" });
@@ -173,7 +175,7 @@ function App() {
                     onClick={toggleVideoFeed}
                     disabled={loading}
                 >{loading ? "Processing..." : isVideoOn ? "Turn Video Off" : "Turn Video On"}</button>
-                <DirectionButtons gamepadState={gamepadState} logs={logs} setLogs={setLogs} />
+                {socketReady && <DirectionButtons socket={socketRef.current} gamepadState={gamepadState} logs={logs} setLogs={setLogs}/>}
                 <div className="info-box">{boxContent}</div>
                 <div className="flask-log-box">
                   <h3 className="log-title">Logs</h3>

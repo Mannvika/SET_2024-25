@@ -3,20 +3,20 @@ import React, { useEffect, useState, useRef } from 'react';
 import io from 'socket.io-client';
 import './index.css';
 
-function DirectionButtons({ logs, setLogs }) {
+function DirectionButtons({ socket, logs, setLogs }) {
   /* ───────────────────── State / Refs ───────────────────── */
   const [activeDirections, setActiveDirections] = useState(new Set());
   const [inputMethod, setInputMethod] = useState('buttons');          // 'buttons', 'wasd', or 'gamepad'
   const [previouslyActiveDirections, setPreviouslyActiveDirections] = useState(new Set());
   const [videoPlaying, setVideoPlaying] = useState(false);
 
-  const socketRef = useRef(null);          // <── socket lives here
+  const socketRef = useRef(socket);          // <── socket lives here
   const lastActionRef = useRef({});
   const activeButtonsRef = useRef(new Set());
 
   /* ───────────────────── Socket init ───────────────────── */
   useEffect(() => {
-    socketRef.current = io('http://127.0.0.1:8000', { transports: ['websocket'] });
+    if(!socketRef.current) return;
 
     socketRef.current.on('connect', () =>
       console.log('✅ Web‑Socket connected:', socketRef.current.id)
@@ -25,18 +25,28 @@ function DirectionButtons({ logs, setLogs }) {
     socketRef.current.on('disconnect', reason =>
       console.log('⚠️ socket disconnected:', reason)
     );
-
-    return () => socketRef.current?.disconnect();
   }, []);
 
   /* ───────────────────── Helpers ───────────────────── */
+  // Add direction translation before emitting
   const sendMovementCommand = (direction, state) => {
+    const directionMap = {
+      up: 'forward',    // Map 'up' to backend's 'forward'
+      down: 'backward', // Map 'down' to backend's 'backward'
+      left: 'left',
+      right: 'right'
+    };
+
     if (socketRef.current?.connected) {
-      socketRef.current.emit('movement_command', { direction, state });   // ← now over socket
-    } else {
-      console.warn('Socket not connected – command dropped');
+      socketRef.current.emit('movement_command', { 
+        action: directionMap[direction],  // Use translated direction
+        state: state === 'move' ? 1 : 0,      // Convert to numeric state
+      });
+      console.log("sending")
     }
+    console.log(directionMap[direction] + " " + state)
   };
+
 
   const toggleVideo = () => {
     setVideoPlaying(prev => {
