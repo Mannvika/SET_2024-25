@@ -1,5 +1,5 @@
 from gevent import monkey
-monkey.patch_all()
+monkey.patch_all(thread = False, select = False)
 
 from flask import Flask
 from flask_cors import CORS
@@ -27,7 +27,7 @@ CORS(app)
 socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 
 # Buffers
-serial_pool = ThreadPool(1)
+#serial_pool = ThreadPool(1)
 video_frames_queue = Queue(maxsize=10)
 audio_queue = Queue(maxsize=5)
 result_queue = Queue(maxsize=10)
@@ -62,7 +62,7 @@ def handle_direction(data):
 
 def arduino_writer():
     arduino = serial.Serial(
-        port="COM9",
+        port="/dev/ttyACM0",
         baudrate=115200,
         timeout=0.1,  # Non-blocking read
         write_timeout=0.1,  # Non-blocking write
