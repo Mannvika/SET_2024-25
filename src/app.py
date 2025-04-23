@@ -4,18 +4,12 @@ monkey.patch_all(thread = False, select = False)
 from flask import Flask
 from flask_cors import CORS
 from flask_socketio import SocketIO
-
 import cv2
-import sounddevice as sd
 import gevent
-import numpy as np
 from fall_detection_system import FallDetectionSystem
 import time
 import traceback
 from gevent.queue import Queue
-from gevent.threadpool import ThreadPool
-import librosa
-import psutil  # For resource monitoring
 import pyaudio
 import serial
 
@@ -27,7 +21,6 @@ CORS(app)
 socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
 
 # Buffers
-#serial_pool = ThreadPool(1)
 video_frames_queue = Queue(maxsize=10)
 audio_queue = Queue(maxsize=5)
 result_queue = Queue(maxsize=10)
@@ -248,13 +241,6 @@ def graceful_shutdown():
     should_run = False
     gevent.sleep(0.5)
     
-    # Close resources
-    if 'runner' in globals() and runner is not None:
-        try:
-            runner.stop()
-        except Exception as e:
-            print(f"Error stopping runner: {str(e)}")
-    
     # Find and kill all active greenlets
     try:
         greenlets = [g for g in gevent.get_hub().threadpool if not g.dead]
@@ -266,17 +252,6 @@ def graceful_shutdown():
 
 if __name__ == '__main__':
     try:
-        #global runner, labels, window_size
-        
-        #runner = AudioImpulseRunner(MODEL_PATH)
-        #model_info = runner.init()
-        
-        #labels = model_info['model_parameters']['labels']
-        #window_size = model_info['model_parameters']['input_features_count']
-
-        #print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
-        #print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
-
         p = pyaudio.PyAudio()
         try:
             devices = []
