@@ -1,216 +1,180 @@
+// DirectionButtons.jsx
 import React, { useEffect, useState, useRef } from 'react';
+import io from 'socket.io-client';
 import './index.css';
 
 function DirectionButtons({ logs, setLogs }) {
-    const [activeDirections, setActiveDirections] = useState(new Set());
-    const [inputMethod, setInputMethod] = useState('buttons'); // 'buttons', 'wasd', or 'gamepad'
-    const [previouslyActiveDirections, setPreviouslyActiveDirections] = useState(new Set()); // Track previous active directions
-    const [videoPlaying, setVideoPlaying] = useState(false); // Track the state of the video (playing or paused)
-    const lastActionRef = useRef({});
-    const activeButtonsRef = useRef(new Set());
+  /* ───────────────────── State / Refs ───────────────────── */
+  const [activeDirections, setActiveDirections] = useState(new Set());
+  const [inputMethod, setInputMethod] = useState('buttons');          // 'buttons', 'wasd', or 'gamepad'
+  const [previouslyActiveDirections, setPreviouslyActiveDirections] = useState(new Set());
+  const [videoPlaying, setVideoPlaying] = useState(false);
 
-    // Function to toggle video
-    const toggleVideo = () => {
-        setVideoPlaying(prevState => {
-            const newState = !prevState;
-            setLogs(prevLogs => [
-                ...prevLogs,
-                newState ? "Video started" : "Video paused"
-            ]);
-            return newState;
-        });
-    };
+  const socketRef = useRef(null);          // <── socket lives here
+  const lastActionRef = useRef({});
+  const activeButtonsRef = useRef(new Set());
 
-    // Send command to Flask server
-    const sendCommand = async (direction, state) => {
-        try {
-            const response = await fetch('http://127.0.0.1:8000/direction', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ direction, state }),
-            });
-            const data = await response.json();
-            console.log("Server response:", data);
-        } catch (error) {
-            console.error("Error sending command:", error);
-        }
-    };
+  /* ───────────────────── Socket init ───────────────────── */
+  useEffect(() => {
+    socketRef.current = io('http://127.0.0.1:8000', { transports: ['websocket'] });
 
-    useEffect(() => {
-        const handleGamepadInput = () => {
-            const gamepads = navigator.getGamepads();
-            if (gamepads[0]) {
-                const gamepad = gamepads[0];
-
-                // Map buttons
-                const dpadButtons = {
-                    up: gamepad.buttons[12]?.pressed,
-                    down: gamepad.buttons[13]?.pressed,
-                    left: gamepad.buttons[14]?.pressed,
-                    right: gamepad.buttons[15]?.pressed,
-                    aButton: gamepad.buttons[0]?.pressed, // A button is typically at index 0
-                };
-
-                const newActiveButtons = new Set();
-
-                for (const [direction, isPressed] of Object.entries(dpadButtons)) {
-                    if (isPressed) {
-                        newActiveButtons.add(direction);
-
-                        // Only log and send if it's a new press
-                        if (!activeButtonsRef.current.has(direction)) {
-                            setLogs(prevLogs => [...prevLogs, `Button Pressed: ${direction}`]);
-                            if (direction === 'aButton') {
-                                toggleVideo(); // Trigger the toggle video function when A button is pressed
-                            } else {
-                                sendCommand(direction, 'move');
-                            }
-                            lastActionRef.current[direction] = "move"; // Update last action
-                        }
-                    } else if (activeButtonsRef.current.has(direction)) {
-                        if (lastActionRef.current[direction] !== "stop") {
-                            setLogs(prevLogs => [...prevLogs, `Button for ${direction} stopped being pressed`]);
-                            sendCommand(direction, 'stop');
-                            lastActionRef.current[direction] = "stop";
-                        }
-                    }
-                }
-
-                activeButtonsRef.current = newActiveButtons;
-                setActiveDirections(newActiveButtons); // Update the active directions state
-            }
-        };
-
-        const gamepadInterval = setInterval(handleGamepadInput, 100);
-        return () => clearInterval(gamepadInterval);
-    }, [logs]);
-
-    // Handle WASD Input
-    const handleKeyDown = (event) => {
-        if (inputMethod !== 'wasd') return;
-
-        let direction = null;
-        switch (event.key) {
-            case 'w':
-            case 'W':
-                direction = 'up';
-                break;
-            case 'a':
-            case 'A':
-                direction = 'left';
-                break;
-            case 's':
-            case 'S':
-                direction = 'down';
-                break;
-            case 'd':
-            case 'D':
-                direction = 'right';
-                break;
-            default:
-                return;
-        }
-
-        if (!activeDirections.has(direction)) {
-            setActiveDirections(prev => new Set(prev.add(direction)));
-            sendCommand(direction, 'move');
-            setLogs(prevLogs => [...prevLogs, `WASD Pressed: ${direction}`]);
-        }
-    };
-
-    const handleKeyUp = (event) => {
-        if (inputMethod !== 'wasd') return;
-
-        let direction = null;
-        switch (event.key) {
-            case 'w':
-            case 'W':
-                direction = 'up';
-                break;
-            case 'a':
-            case 'A':
-                direction = 'left';
-                break;
-            case 's':
-            case 'S':
-                direction = 'down';
-                break;
-            case 'd':
-            case 'D':
-                direction = 'right';
-                break;
-            default:
-                return;
-        }
-
-        if (activeDirections.has(direction)) {
-            setActiveDirections(prev => {
-                const newDirections = new Set(prev);
-                newDirections.delete(direction);
-                return newDirections;
-            });
-            sendCommand(direction, 'stop');
-            setLogs(prevLogs => [...prevLogs, `Stopped moving ${direction}`]);
-        }
-    };
-
-    useEffect(() => {
-        if (inputMethod === 'wasd') {
-            window.addEventListener('keydown', handleKeyDown);
-            window.addEventListener('keyup', handleKeyUp);
-        } else {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        }
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            window.removeEventListener('keyup', handleKeyUp);
-        };
-    }, [inputMethod, activeDirections]);
-
-    const toggleInputMethod = (method) => {
-        setInputMethod(method);
-        setActiveDirections(new Set());
-        setPreviouslyActiveDirections(new Set());
-    };
-
-    return (
-        <div>
-            {/* Toggle buttons for input method */}
-            <div className="input-method-controls">
-                <button
-                    className={`control-button ${inputMethod === 'buttons' ? 'active' : ''}`}
-                    onClick={() => toggleInputMethod('buttons')}
-                >
-                    Button Controls
-                </button>
-                <button
-                    className={`control-button ${inputMethod === 'wasd' ? 'active' : ''}`}
-                    onClick={() => toggleInputMethod('wasd')}
-                >
-                    WASD Controls
-                </button>
-                <button
-                    className={`control-button ${inputMethod === 'gamepad' ? 'active' : ''}`}
-                    onClick={() => toggleInputMethod('gamepad')}
-                >
-                    Gamepad Controls
-                </button>
-            </div>
-
-            {/* Directional Buttons */}
-            <div className="keyboard">
-                <button className={`key ${activeDirections.has('up') ? 'active' : ''}`}>Up</button>
-                <button className={`key ${activeDirections.has('left') ? 'active' : ''}`}>Left</button>
-                <button className={`key ${activeDirections.has('down') ? 'active' : ''}`}>Down</button>
-                <button className={`key ${activeDirections.has('right') ? 'active' : ''}`}>Right</button>
-            </div>
-
-        </div>
+    socketRef.current.on('connect', () =>
+      console.log('✅ Web‑Socket connected:', socketRef.current.id)
     );
+
+    socketRef.current.on('disconnect', reason =>
+      console.log('⚠️ socket disconnected:', reason)
+    );
+
+    return () => socketRef.current?.disconnect();
+  }, []);
+
+  /* ───────────────────── Helpers ───────────────────── */
+  const sendMovementCommand = (direction, state) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('movement_command', { direction, state });   // ← now over socket
+    } else {
+      console.warn('Socket not connected – command dropped');
+    }
+  };
+
+  const toggleVideo = () => {
+    setVideoPlaying(prev => {
+      const newState = !prev;
+      setLogs(prevLogs => [
+        ...prevLogs,
+        newState ? 'Video started' : 'Video paused'
+      ]);
+
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('toggle_video', {action: newState ? 'start' : 'stop'  });
+      }
+
+      return newState;
+    });
+  };
+
+  /* ───────────────────── Game‑pad polling ───────────────────── */
+  useEffect(() => {
+    const handleGamepadInput = () => {
+      const gp = navigator.getGamepads()[0];
+      if (!gp) return;
+
+      const dpad = {
+        up: gp.buttons[12]?.pressed,
+        down: gp.buttons[13]?.pressed,
+        left: gp.buttons[14]?.pressed,
+        right: gp.buttons[15]?.pressed,
+        aButton: gp.buttons[0]?.pressed
+      };
+
+      const newActive = new Set();
+
+      for (const [direction, pressed] of Object.entries(dpad)) {
+        if (pressed) {
+          newActive.add(direction);
+
+          if (!activeButtonsRef.current.has(direction)) {
+            if (direction === 'aButton') {
+              toggleVideo();
+            } else {
+              sendMovementCommand(direction, 'move');
+            }
+            lastActionRef.current[direction] = 'move';
+          }
+        } else if (activeButtonsRef.current.has(direction) && lastActionRef.current[direction] !== 'stop') {
+          sendMovementCommand(direction, 'stop');
+          lastActionRef.current[direction] = 'stop';
+        }
+      }
+
+      activeButtonsRef.current = newActive;
+      setActiveDirections(newActive);
+    };
+
+    const id = setInterval(handleGamepadInput, 100);
+    return () => clearInterval(id);
+  }, [logs]);
+
+  /* ───────────────────── WASD handlers ───────────────────── */
+  const handleKeyDown = e => {
+    if (inputMethod !== 'wasd') return;
+
+    const map = { w: 'up', a: 'left', s: 'down', d: 'right' };
+    const dir = map[e.key.toLowerCase()];
+    if (!dir) return;
+
+    if (!activeDirections.has(dir)) {
+      setActiveDirections(p => new Set(p).add(dir));
+      sendMovementCommand(dir, 'move');
+      setLogs(l => [...l, `WASD Pressed: ${dir}`]);
+    }
+  };
+
+  const handleKeyUp = e => {
+    if (inputMethod !== 'wasd') return;
+
+    const map = { w: 'up', a: 'left', s: 'down', d: 'right' };
+    const dir = map[e.key.toLowerCase()];
+    if (!dir) return;
+
+    if (activeDirections.has(dir)) {
+      setActiveDirections(p => {
+        const n = new Set(p);
+        n.delete(dir);
+        return n;
+      });
+      sendMovementCommand(dir, 'stop');
+      setLogs(l => [...l, `Stopped moving ${dir}`]);
+    }
+  };
+
+  useEffect(() => {
+    if (inputMethod === 'wasd') {
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [inputMethod, activeDirections]);
+
+  /* ───────────────────── UI helpers ───────────────────── */
+  const toggleInputMethod = m => {
+    setInputMethod(m);
+    setActiveDirections(new Set());
+    setPreviouslyActiveDirections(new Set());
+  };
+
+  /* ───────────────────── JSX ───────────────────── */
+  return (
+    <div>
+      {/* Input‑method selector */}
+      <div className="input-method-controls">
+        <button
+          className={`control-button ${inputMethod === 'wasd' ? 'active' : ''}`}
+          onClick={() => toggleInputMethod('wasd')}
+        >
+          WASD
+        </button>
+        <button
+          className={`control-button ${inputMethod === 'gamepad' ? 'active' : ''}`}
+          onClick={() => toggleInputMethod('gamepad')}
+        >
+          Gamepad
+        </button>
+      </div>
+
+      {/* Direction HUD */}
+      <div className="keyboard">
+        <button className={`key ${activeDirections.has('up') ? 'active' : ''}`}>Forward</button>
+        <button className={`key ${activeDirections.has('left') ? 'active' : ''}`}>Left</button>
+        <button className={`key ${activeDirections.has('down') ? 'active' : ''}`}>Backward</button>
+        <button className={`key ${activeDirections.has('right') ? 'active' : ''}`}>Right</button>
+      </div>
+    </div>
+  );
 }
 
 export default DirectionButtons;

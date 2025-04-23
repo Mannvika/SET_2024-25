@@ -44,7 +44,7 @@ code {
 .control-button.active {
   background-color: #93cf40; /* green for active button */
 }
-/* index.css */
+
 
 .keyboard .key {
     background-color: #0f6cb6; /* Primary color for the button */
@@ -52,11 +52,13 @@ code {
     border: black;               /* Remove default border */
     border-radius: 5px;        /* Rounded corners */
     padding: 15px 25px;        /* Padding inside the button */
-    margin: 5px;               /* Margin between buttons */
+    margin: 2.5px;               /* Margin between buttons */
     cursor: pointer;            /* Pointer cursor on hover */
     font-size: 16px;            /* Font size */
     transition: background-color 0.3s ease; /* Smooth transition effect */
+
 }
+
 
 .keyboard .key:hover {
     background-color: #93cf40; /* green on hover */
@@ -67,7 +69,10 @@ code {
 }
 
 .input-method-controls {
-    margin-bottom: 20px; /* Spacing below the controls */
+    margin-bottom: 5px; /* Spacing below the controls */
+}
+.input-method-controls .key:hover {
+    margin-bottom: 5px; /* Spacing below the controls */
 }
 
 .control-button {

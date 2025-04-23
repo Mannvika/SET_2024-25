@@ -119,6 +119,35 @@ def handle_controller_input(data):
         log_message(f"D-Pad Pressed: {dpad_buttons}")
 
 
+@socketio.on("movement_command")
+# -----------------------------------------------------------------
+# SocketIO Event Handlers  –  only the movement handler changed
+# -----------------------------------------------------------------
+@socketio.on("movement_command")
+def handle_movement_command(data):
+    """
+    data = { "direction": "up" | "down" | "left" | "right",
+             "state"     : "move" | "stop" }
+    """
+    # translate to plain‑English motion words
+    direction_map = {
+        "up":   "forward",
+        "down": "backward",
+        "left": "left",
+        "right": "right"
+    }
+
+    directions = data["direction"]
+    state     = data["state"]
+
+    direction = direction_map.get(directions, directions)
+    if state == "move":
+        log_message(f"moving {direction}")
+    else:  # state == "stop"
+        log_message(f"stopped {direction}")
+
+
+
 @socketio.on("toggle_video")
 def handle_toggle_video(data):
     """
