@@ -185,7 +185,7 @@ def emit_data():
             if not result_queue.empty():
                 #This will return an queue of Booleans of whether the classification is Screaming or not.
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
-                time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
+                #time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
 
         except BrokenPipeError:
             print("Client disconnected - resetting queues")
