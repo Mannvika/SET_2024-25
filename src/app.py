@@ -154,9 +154,9 @@ def emit_video_frames():
                 frame = cv2.flip(frame, -1)
                     
                 # Skip frames if queue is getting full
-                if video_frames_queue.qsize() > 5:
-                    gevent.sleep(0.2)
-                    continue
+                #if video_frames_queue.qsize() > 5:
+                    #gevent.sleep(0.2)
+                    #continue
                     
                 processed_frame = fall_system.process_frame(frame)
                 
