@@ -1,5 +1,5 @@
 from gevent import monkey
-monkey.patch_all(thread = False, select = False)
+monkey.patch_all(thread = False, select = True)
 
 from flask import Flask
 from flask_cors import CORS
@@ -18,7 +18,7 @@ from edge_impulse_linux.audio import AudioImpulseRunner
 
 app = Flask(__name__)
 CORS(app)
-socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*")
+socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*", allow_upgrades=False)
 
 # Buffers
 video_frames_queue = Queue(maxsize=10)
@@ -38,7 +38,6 @@ MODEL_PATH = "/home/ufset/Desktop/SET_2024-25/src/audio_model.eim"
 # System State
 compressFrame = False
 should_run = True
-starttime = time.time()
 
 @socketio.on('movement_command')
 def handle_direction(data):
@@ -235,6 +234,4 @@ if __name__ == '__main__':
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
     except KeyboardInterrupt:
         graceful_shutdown()
-
- 
 
