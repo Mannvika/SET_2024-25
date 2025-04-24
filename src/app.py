@@ -185,7 +185,7 @@ def emit_data():
             if not result_queue.empty():
                 #This will return an queue of Booleans of whether the classification is Screaming or not.
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
-                #time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
+                time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
 
         except BrokenPipeError:
             print("Client disconnected - resetting queues")
@@ -215,17 +215,15 @@ def graceful_shutdown():
 if __name__ == '__main__':
     try:
         p = pyaudio.PyAudio()
-        default_id = 0
         try:
+            devices = []
             for i in range(p.get_device_count()):
                 dev = p.get_device_info_by_index(i)
-                if 'default' in dev['name'].lower():
-                    default_id = i
-                    break
+            print(f"[{i}] {dev['name']} {dev['maxInputChannels']}")
         finally:
             p.terminate()
-            
-        device_id = default_id
+
+        device_id = int(input("Enter Device ID: "))
 
         gevent.spawn(emit_data)
         gevent.spawn(emit_video_frames)
