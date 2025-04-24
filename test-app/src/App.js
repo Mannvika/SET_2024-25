@@ -59,7 +59,13 @@ function App() {
     }, []);
 
     useEffect(() => {
-        const socket = io(flaskServerUrl, { transports: ['websocket'] });
+        const socket = io(flaskServerUrl, { transports: ['websocket'], withCredentials: true,   extraHeaders: {
+            "Access-Control-Allow-Origin": flaskServerUrl,   reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            randomizationFactor: 0.5
+          } });
         socket.binaryType = 'arraybuffer';
         socketRef.current = socket;
 
