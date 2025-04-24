@@ -147,6 +147,8 @@ def emit_video_frames():
 
                 if not rval:
                     break
+
+                frame = cv2.flip(frame, -1)
                     
                 # Skip frames if queue is getting full
                 if video_frames_queue.qsize() > 5:
