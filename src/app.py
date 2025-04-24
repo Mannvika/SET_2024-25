@@ -56,47 +56,7 @@ def handle_direction(data):
 
 def arduino_writer():
     arduino = serial.Serial(
-        port="/dev/ttyACM0",
-        baudrate=115200,
-        timeout=0.1,  # Non-blocking read
-        write_timeout=0.1,  # Non-blocking write
-        bytesize=serial.EIGHTBITS,
-        parity=serial.PARITY_NONE,
-        stopbits=serial.STOPBITS_ONE)
-    
-    while should_run:
-        try:
-            if not direction_queue.empty():
-                cmd = direction_queue.get_nowait()
-                print(cmd)
-                arduino.write(f"{cmd}\n".encode('utf-8'))  # Yields automatically
-            gevent.sleep(0.001)
-        except (serial.SerialException, gevent.timeout.Timeout) as e:
-            print(f"Non-blocking error: {str(e)}")
-            gevent.sleep(0.1)
-        finally:
-            if not should_run:
-                arduino.close()
-
-   
-
-@socketio.on('movement_command')
-def handle_direction(data):
-    command_map = {
-        'forward': 'F', 
-        'backward': 'B',
-        'left': 'L',
-        'right': 'R',
-        'turn': 'T'
-    }
-    
-    if data['action'] in command_map:
-        state = 1 if data['state'] else 0
-        direction_queue.put(f"{command_map[data['action']]}:{state}")
-
-def arduino_writer():
-    arduino = serial.Serial(
-        port="/dev/ttyACM0",
+        port="COM9",
         baudrate=115200,
         timeout=0.1,  # Non-blocking read
         write_timeout=0.1,  # Non-blocking write
