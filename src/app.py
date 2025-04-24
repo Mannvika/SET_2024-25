@@ -56,7 +56,7 @@ def handle_direction(data):
 
 def arduino_writer():
     arduino = serial.Serial(
-        port="COM9",
+        port="/dev/ttyACM0",
         baudrate=115200,
         timeout=0.1,  # Non-blocking read
         write_timeout=0.1,  # Non-blocking write
@@ -176,7 +176,7 @@ def emit_data():
     """Unified data emitter with error handling"""
     while should_run:
         try:
-            if not video_frames_queue.empty() and (time.time() - starttime > 30):
+            if not video_frames_queue.empty():
                 socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
                 
             if not audio_queue.empty():
@@ -185,7 +185,9 @@ def emit_data():
             if not result_queue.empty():
                 #This will return an queue of Booleans of whether the classification is Screaming or not.
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
-                time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
+            
+            gevent.sleep(0.01)
+            #time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
 
         except BrokenPipeError:
             print("Client disconnected - resetting queues")
@@ -215,15 +217,17 @@ def graceful_shutdown():
 if __name__ == '__main__':
     try:
         p = pyaudio.PyAudio()
+        default_id = 0
         try:
-            devices = []
             for i in range(p.get_device_count()):
                 dev = p.get_device_info_by_index(i)
-            print(f"[{i}] {dev['name']} {dev['maxInputChannels']}")
+                if 'default' in dev['name'].lower():
+                    default_id = i
+                    break
         finally:
             p.terminate()
-
-        device_id = int(input("Enter Device ID: "))
+        
+        device_id = default_id  # Use auto-detected ID
 
         gevent.spawn(emit_data)
         gevent.spawn(emit_video_frames)
@@ -235,3 +239,4 @@ if __name__ == '__main__':
 
     except KeyboardInterrupt:
         graceful_shutdown()
+
