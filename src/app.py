@@ -46,7 +46,7 @@ def handle_direction(data):
         'backward': 'B',
         'left': 'L',
         'right': 'R',
-        'turn': 'T'
+        'dance': 'D'
     }
     
     if data['action'] in command_map:
