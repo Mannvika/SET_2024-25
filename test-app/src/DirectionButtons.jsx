@@ -34,7 +34,8 @@ function DirectionButtons({ socket, logs, setLogs }) {
       up: 'forward',    // Map 'up' to backend's 'forward'
       down: 'backward', // Map 'down' to backend's 'backward'
       left: 'left',
-      right: 'right'
+      right: 'right',
+      dance: 'dance'
     };
 
     if (socketRef.current?.connected) {
@@ -110,7 +111,7 @@ function DirectionButtons({ socket, logs, setLogs }) {
   const handleKeyDown = e => {
     if (inputMethod !== 'wasd') return;
 
-    const map = { w: 'up', a: 'left', s: 'down', d: 'right' };
+    const map = { w: 'up', a: 'left', s: 'down', d: 'right', j: 'dance' };
     const dir = map[e.key.toLowerCase()];
     if (!dir) return;
 
@@ -124,7 +125,7 @@ function DirectionButtons({ socket, logs, setLogs }) {
   const handleKeyUp = e => {
     if (inputMethod !== 'wasd') return;
 
-    const map = { w: 'up', a: 'left', s: 'down', d: 'right' };
+    const map = { w: 'up', a: 'left', s: 'down', d: 'right', j: 'dance' };
     const dir = map[e.key.toLowerCase()];
     if (!dir) return;
 
@@ -182,6 +183,7 @@ function DirectionButtons({ socket, logs, setLogs }) {
         <button className={`key ${activeDirections.has('left') ? 'active' : ''}`}>Left</button>
         <button className={`key ${activeDirections.has('down') ? 'active' : ''}`}>Backward</button>
         <button className={`key ${activeDirections.has('right') ? 'active' : ''}`}>Right</button>
+        <button className={`key ${activeDirections.has('dance') ? 'active' : ''}`}>Dance</button>
       </div>
     </div>
   );
