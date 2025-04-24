@@ -188,12 +188,11 @@ def emit_data():
                 #socketio.emit('audio_data', {'chunk': audio_queue.get_nowait()})
                 #gevent.sleep(0.001)
                 
-            elif not result_queue.empty():
+            if not result_queue.empty():
                 #This will return an queue of Booleans of whether the classification is Screaming or not.
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
-                gevent.sleep(0.001)
-            else:
-                gevent.sleep(0.01)
+                
+            gevent.sleep(0.01)
             #time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
 
         except BrokenPipeError:
