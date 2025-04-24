@@ -21,7 +21,7 @@ CORS(app)
 socketio = SocketIO(app, async_mode="gevent", cors_allowed_origins="*", allow_upgrades=False)
 
 # Buffers
-video_frames_queue = Queue(maxsize=10)
+video_frames_queue = Queue(maxsize=25)
 audio_queue = Queue(maxsize=5)
 result_queue = Queue(maxsize=10)
 direction_queue = Queue(maxsize=20)
@@ -161,7 +161,7 @@ def emit_video_frames():
                                               [cv2.IMWRITE_JPEG_QUALITY, 40])
                                               
                 video_frames_queue.put(encoded_image.tobytes())
-                gevent.sleep(0.000000000001)
+                gevent.sleep(0)
                 
         except Exception as e:
             print(f"Video capture error: {str(e)}")
@@ -178,14 +178,16 @@ def emit_data():
             if not video_frames_queue.empty():
                 socketio.emit('video_frame', {'frame': video_frames_queue.get_nowait()})
                 
-            if not audio_queue.empty():
-                socketio.emit('audio_data', {'chunk': audio_queue.get_nowait()})
+            #elif not audio_queue.empty():
+                #socketio.emit('audio_data', {'chunk': audio_queue.get_nowait()})
+                #gevent.sleep(0.001)
                 
-            if not result_queue.empty():
+            elif not result_queue.empty():
                 #This will return an queue of Booleans of whether the classification is Screaming or not.
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
-            
-            gevent.sleep(0.01)
+                gevent.sleep(0.001)
+            else:
+                gevent.sleep(0.01)
             #time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
 
         except BrokenPipeError:
@@ -202,7 +204,7 @@ def graceful_shutdown():
     # Stop all processing first
     global should_run
     should_run = False
-    gevent.sleep(0.5)
+    gevent.sleep(0.1)
     
     # Find and kill all active greenlets
     try:
