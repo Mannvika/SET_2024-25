@@ -1,5 +1,5 @@
 from gevent import monkey
-monkey.patch_all(thread = False, select = True)
+monkey.patch_all(thread = False, select = True, dns=True, aggressive=True)
 
 from flask import Flask
 from flask_cors import CORS
