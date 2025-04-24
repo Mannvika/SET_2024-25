@@ -253,15 +253,17 @@ def graceful_shutdown():
 if __name__ == '__main__':
     try:
         p = pyaudio.PyAudio()
+        default_id = 0
         try:
-            devices = []
             for i in range(p.get_device_count()):
                 dev = p.get_device_info_by_index(i)
-                print(f"[{i}] {dev['name']} {dev['maxInputChannels']}")
+                if 'default' in dev['name'].lower():
+                    default_id = i
+                    break
         finally:
-            p.terminate()        
+            p.terminate()
             
-        device_id = int(input("Enter Device ID: "))
+        device_id = default_id
 
         gevent.spawn(emit_data)
         gevent.spawn(emit_video_frames)
