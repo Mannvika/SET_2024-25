@@ -131,7 +131,11 @@ def emit_video_frames():
     frame_width = 320
     frame_height = 240
 
+    target_fps = 24
+    frame_interval = 1.0 / target_fps
+
     while should_run:
+        start_time = time.monotonic()
         try:
             vc = cv2.VideoCapture(0)
             if not vc.isOpened():
@@ -161,7 +165,9 @@ def emit_video_frames():
                                               [cv2.IMWRITE_JPEG_QUALITY, 40])
                                               
                 video_frames_queue.put(encoded_image.tobytes())
-                gevent.sleep(0)
+                elapsed = time.monotonic() - start_time
+                sleep_duration = max(0, frame_interval - elapsed)
+                gevent.sleep(sleep_duration)
                 
         except Exception as e:
             print(f"Video capture error: {str(e)}")
