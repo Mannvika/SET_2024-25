@@ -96,7 +96,6 @@ def audio_classification_loop():
             print(f"Loaded model: {model_info['project']['owner']}/{model_info['project']['name']}")
             print(f"Window: {window_size} samples ({window_size/MODEL_SAMPLE_RATE:.2f}s)")
             for res, audio in runner.classifier(device_id=device_id):
-                audio_queue.put(audio)
                 # Prints how long it took to get the classification                
                 print('Result (%d ms.) ' % (res['timing']['dsp'] + res['timing']['classification']), end='')
                 for label in labels:
@@ -154,9 +153,9 @@ def emit_video_frames():
                 frame = cv2.flip(frame, -1)
                     
                 # Skip frames if queue is getting full
-                #if video_frames_queue.qsize() > 5:
-                    #gevent.sleep(0.2)
-                    #continue
+                if video_frames_queue.qsize() > video_frames_queue.maxsize/2:
+                    gevent.sleep(0.02)
+                    continue
                     
                 processed_frame = fall_system.process_frame(frame)
                 
@@ -192,7 +191,7 @@ def emit_data():
                 #This will return an queue of Booleans of whether the classification is Screaming or not.
                 socketio.emit('audio_classification', {'result': result_queue.get_nowait()})
                 
-            gevent.sleep(0.01)
+            gevent.sleep(0.005)
             #time.sleep(max(0.01, 1 / (2 * len(video_frames_queue) + 1)))
 
         except BrokenPipeError:
