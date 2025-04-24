@@ -109,9 +109,9 @@ function App() {
 
         socket.on("audio_classification", ({ result }) => {
             console.log("audio classified:", result);
-            setAudioLabel(result);           // <— drives the UI box
+            setAudioLabel(result ? "screaming" : "calm");
         });
-
+        
         return () => {
             audioContextRef.current?.close();
             socket.off("connect");
