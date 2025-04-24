@@ -65,11 +65,11 @@ def arduino_writer():
     
     while should_run:
         try:
-            if not direction_queue.empty():
+            while not direction_queue.empty():
                 cmd = direction_queue.get_nowait()
                 print(cmd)
                 arduino.write(f"{cmd}\n".encode('utf-8'))  # Yields automatically
-            gevent.sleep(0.001)
+            gevent.sleep(0.0001)
         except (serial.SerialException, gevent.timeout.Timeout) as e:
             print(f"Non-blocking error: {str(e)}")
             gevent.sleep(0.1)
@@ -233,10 +233,10 @@ if __name__ == '__main__':
 
         device_id = int(input("Enter Device ID: "))
 
+        gevent.spawn(arduino_writer)
         gevent.spawn(emit_data)
         gevent.spawn(emit_video_frames)
         gevent.spawn(audio_classification_loop)
-        gevent.spawn(arduino_writer)
 
         socketio.run(app, host="0.0.0.0", port=8000, debug=False)
     except KeyboardInterrupt:
