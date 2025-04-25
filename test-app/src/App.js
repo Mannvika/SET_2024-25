@@ -3,7 +3,8 @@ import io from 'socket.io-client';
 import './App.css';
 import DirectionButtons from './DirectionButtons';
 
-const flaskServerUrl = "http://192.168.34.26:8000";
+// const flaskServerUrl = "http://192.168.34.26:8000"; // testing on nano
+const flaskServerUrl = "http://127.0.0.1:8000"; // testing on local machine
 const FRAME_DURATION = 0.1; // seconds per audio chunk (100ms)
 const SAMPLE_RATE = 16000; // fixed sample rate for playback
 const FRAME_BYTES = SAMPLE_RATE * FRAME_DURATION * Float32Array.BYTES_PER_ELEMENT; // 1600 samples * 4 bytes = 6400 bytes
@@ -194,7 +195,7 @@ function App() {
             <div className="audio-status-box">
                 <span
                     className={
-                        audioLabel === "screaming" ? "label-scream" : "label-calm"
+                        audioLabel === "screaming" ? "label-scream" : "label-not-screaming"
                     }
                 >
                     {audioLabel}
@@ -207,7 +208,7 @@ function App() {
                     <li><strong>D-Pad Down:</strong> Back</li>
                     <li><strong>D-Pad Left:</strong> Left</li>
                     <li><strong>D-Pad Right:</strong> Right</li>
-                    <li><strong>A Button:</strong> Toggle Video</li>
+                    {/*<li><strong>A Button:</strong> Toggle Video</li>*/}
                 </ul>
             </div>
         </div>

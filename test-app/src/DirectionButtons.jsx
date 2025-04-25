@@ -118,7 +118,7 @@ function DirectionButtons({ socket, logs, setLogs }) {
     if (!activeDirections.has(dir)) {
       setActiveDirections(p => new Set(p).add(dir));
       sendMovementCommand(dir, 'move');
-      setLogs(l => [...l, `WASD Pressed: ${dir}`]);
+      setLogs(l => [...l, `WASD: ${dir}`]);
     }
   };
 
